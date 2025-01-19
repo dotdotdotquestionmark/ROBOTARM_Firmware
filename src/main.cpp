@@ -1,8 +1,9 @@
 #include <avr/io.h>
+#include "Arduino.h"
 #include <util/delay.h>
 #include "motordriver.h"
-
-#include "Arduino.h"
+#include "TMCStepper.h"
+#include "string.h"
 
 using namespace std;
 
@@ -33,6 +34,9 @@ using namespace std;
 
 #define GRIPPER_PIN //
 
+#define LASER_PIN 30
+#define LASER_TRIGGER 32
+
 // blue wire outlet is yellow, redwire outlet is purple
 
 // Pin Definitions
@@ -46,7 +50,7 @@ using namespace std;
 //#define CONTROL_BIT 1 // Corresponds to bit 1 of Port B
 
 
-struct JOINTS {
+struct JOINTStruct {
     uint8_t STEP_PIN;
     uint8_t DIR_PIN;
     uint8_t ENA_PIN;
@@ -54,45 +58,119 @@ struct JOINTS {
     long STEPS; // amount of moves
     long SPEED; // interval
     bool STATE; // active or not
+    int ANGLE_TRUE;
+    int ANGLE_IDEAL;
+    bool HOMESTATUS;
+    unsigned long LASTSTEP;
 };
 
-JOINTS baseJOINT;
-JOINTS shoulderJOINT;
-JOINTS elbowJOINT;
-JOINTS forearmJOINT;
+JOINTStruct BaseJoint;
+JOINTStruct ShoulderJoint;
+JOINTStruct ElbowJoint;
+JOINTStruct ForearmJoint;
 
+JOINTStruct INCOMINGJointCommand;
 
-JOINTS*BASE = &baseJOINT;
-JOINTS*SHOUDER = &shoulderJOINT;
-JOINTS*ELBOW = &elbowJOINT;
-JOINTS*FOREARM =&forearmJOINT;
+JOINTStruct* BASE = &BaseJoint;
+JOINTStruct* SHOULDER = &ShoulderJoint;
+JOINTStruct* ELBOW = &ElbowJoint;
+JOINTStruct* FOREARM = &ForearmJoint;
+JOINTStruct* INCOMING = &INCOMINGJointCommand;
 
+void jointAssignment(){
+    // assign base values
+    BASE -> STEP_PIN = BASE_STEP_PIN;
+    BASE -> DIR_PIN = BASE_DIR_PIN;
+    BASE -> ENA_PIN = BASE_ENA_PIN;
+    BASE -> STEPS = 0;
+    BASE -> SPEED = 0;
+    BASE -> ANGLE_TRUE;
+    BASE -> ANGLE_IDEAL;
+    BASE -> HOMESTATUS = false;
 
-void motorDriver(JOINTS *motor) {
-    uint8_t stepPin = motor->STEP_PIN;
-    uint8_t dirPin = motor->DIR_PIN;
-    uint8_t enaPin = motor->ENA_PIN;
+    //assign shoulder values
+    SHOULDER -> STEP_PIN = SHOULDER_STEP_PIN;
+    SHOULDER -> DIR_PIN = SHOULDER_DIR_PIN;
+    SHOULDER -> ENA_PIN = SHOULDER_ENA_PIN;
+    SHOULDER -> STEPS = 0;
+    SHOULDER -> SPEED = 0;
+    SHOULDER -> ANGLE_TRUE;
+    SHOULDER -> ANGLE_IDEAL;
+    SHOULDER -> HOMESTATUS = false;
+
+    ELBOW -> STEP_PIN = ELBOW_STEP_PIN; 
+    ELBOW -> DIR_PIN = ELBOW_DIR_PIN; 
+    ELBOW -> ENA_PIN = ELBOW_ENA_PIN; 
+    ELBOW -> STEPS = 0; 
+    ELBOW -> SPEED = 0; 
+    ELBOW -> ANGLE_TRUE; 
+    ELBOW -> ANGLE_IDEAL; 
+    ELBOW -> HOMESTATUS = false;
+
+    FOREARM -> STEP_PIN = FOREARM_STEP_PIN; 
+    FOREARM -> DIR_PIN = FOREARM_DIR_PIN; 
+    FOREARM -> ENA_PIN = FOREARM_ENA_PIN; 
+    FOREARM -> STEPS = 0; 
+    FOREARM -> SPEED = 0; 
+    FOREARM -> ANGLE_TRUE; 
+    FOREARM -> ANGLE_IDEAL; 
+    FOREARM -> HOMESTATUS = false;
+    
 }
 
-void loop() {
-    // Set PB7 (Pin 13 on Arduino) as an output
+void motorDriver(JOINTStruct* JOINT) {  
+    // this function will live in the main loop and manipulate motors on a per need basis
+    // get STEP COUNT, DIRECTION, and SPEED, and last step
+    unsigned long CurrentTime = micros();
+    int DIR = JOINT -> DIR;
+    int SPEED = JOINT -> SPEED;
+    unsigned long STEPCOUNT = JOINT -> STEPS;
 
-    while(1)
-    {
-        PORTB |= (1 << TEST_PIN);
-        PORTB |= (1 << BASE_STEP_PIN);
-        PORTC |= (1 << ELBOW_STEP_PIN);
-        PORTG |= (1 << SHOULDER_STEP_PIN);
-        PORTL |= (1 << FOREARM_STEP_PIN);
-        // Wait for some time
-        _delay_us(1000);
-        PORTB &= ~(1 << TEST_PIN);
-        PORTB &= ~(1 << BASE_STEP_PIN);
-        PORTC &= ~(1 << ELBOW_STEP_PIN);
-        PORTG &= ~(1 << SHOULDER_STEP_PIN);
-        PORTL &= ~(1 << FOREARM_STEP_PIN);
-        _delay_us(1000);
+    // speed should be given in 0-10 settings but what dimensions???
+    // use this to calculate interval 0-99 rpm?
+
+    
+
+
+}
+
+//homing functions
+
+void wristHoming() {
+    // rotate wrist until it hits the home position
+    // turn on laser pin, start receiving laser data 
+    digitalWrite(LASER_PIN, HIGH);
+
+
+    // rotate until laser blockage is detected 
+    for(;;) {
+        int Trigger_Status = digitalRead(LASER_TRIGGER);
+        digitalWrite(FOREARM_STEP_PIN, HIGH);
+        delay(25);
+        digitalWrite(FOREARM_STEP_PIN, LOW);
+        delay(25);
+        if(Trigger_Status == 1) {
+            Serial.println("okay Stanman we detected the stopping pin");
+            break;
+        }
     }
+    // take steps and count until blockage passes 
+    for(;;){
+        int Trigger_Status = digitalRead(LASER_TRIGGER);
+
+        
+    }
+    
+}
+
+void stateControls(){
+    // this code will guess the approx angle of the joint
+    // check if each joint is up to date
+    // only call this code when new state is requested
+    // this will compare ideal with actual state and apply the speed settings
+    // this will also apply the direction
+
+    
 }
 
 void uart0_init(uint32_t baud) {
@@ -126,26 +204,7 @@ const char *third_test_message = "test3 successful\r\n";
 
 char*inputstring = "";
 
-void send_hello_world(void) {
-  const char *message_ptr = hello_world_message;
-  while (*message_ptr) {
-    uart0_transmit(*message_ptr++);
-  }
-}
 
-void send_second(void) {
-    const char *second_message = second_test_message;
-    while(*second_message){
-        uart0_transmit(*second_message++);
-    }
-}
-
-void send_third(void){
-    const char *third_message = third_test_message;
-    while(*third_message){
-        uart0_transmit(*third_message++);
-    }
-}
 
 char read_uart_string(char *buffer) {
   int index = 0;
@@ -165,6 +224,13 @@ char read_uart_string(char *buffer) {
   }
 }
 
+void send_hello_world(void) {
+  const char *message_ptr = hello_world_message;
+  while (*message_ptr) {
+    uart0_transmit(*message_ptr++);
+  }
+}
+
 void setup() {
 
     uart0_init(9600);
@@ -177,6 +243,9 @@ void setup() {
     DDRC |= (1 << DDC4);
     DDRC |= (1 << DDC5);
     DDRL |= (1 << DDL2);
+    pinMode(LASER_PIN, OUTPUT);
+    pinMode(LASER_TRIGGER, INPUT);
+
 } 
 
 int inputHandler(char *inputString) {
@@ -186,14 +255,39 @@ int inputHandler(char *inputString) {
         // Check if the first character is 'A'
         // command structure example for axis1, 
         // A1M360H100
-        if (inputString[0] == 'A') {
+
+        // command types
+        // J1P Joint 1 Position
+        // J1090005 joint 1 to 90.0 speed of 05rpm
+        // J2180010 Joint 2 to 180.0 speed of 10rpm
+        // J2180099 Joint 2 to 180.0 speed of 99 rpm
+
+        // clean this code later, make it work first. 
+
+        // this only sets ideal state and speed
+
+        if (inputString[0] == 'J') {
+            JOINTStruct INCOMINGJointCommand;
+
             send_hello_world(); 
-            if (inputString[1] == 'H') {
-                send_second();
+            if (inputString[1] == '1') { 
+                send_hello_world();
             }
+
+            char Speed = inputString[6];
+
+
+            // start passing data from input string to joint 
+            INCOMING -> SPEED = Speed;
+
+            // gather the speed param 
+
+
         }
-        }
+
+        
     }
+}
 
 int main(void) {
     char receivedString[MAX_STRING_LENGTH];
@@ -201,6 +295,11 @@ int main(void) {
     // main loop
     while(1) {
         inputHandler(receivedString);
+        // motor handling code
     }
     return 0;
 }
+
+// you need the structures to serve as a state bank.
+// if current and target is not the same keep rotating until you hit the target
+// use a steps to angle calculator to figure out where your true angle is. 
