@@ -58,10 +58,11 @@ struct JOINTStruct {
     long STEPS; // amount of moves
     long SPEED; // interval
     bool STATE; // active or not
-    int ANGLE_TRUE;
-    int ANGLE_IDEAL;
+    float ANGLE_TRUE;
+    float ANGLE_IDEAL;
     bool HOMESTATUS;
     unsigned long LASTSTEP;
+    float STEP_FACTOR; // the amount of degrees each step will change the joint
 };
 
 JOINTStruct BaseJoint;
@@ -125,13 +126,38 @@ void motorDriver(JOINTStruct* JOINT) {
     int DIR = JOINT -> DIR;
     int SPEED = JOINT -> SPEED;
     unsigned long STEPCOUNT = JOINT -> STEPS;
+    uint8_t STEP_PIN = JOINT->STEP_PIN;
+    float ratio = JOINT->STEP_FACTOR;
+    unsigned long LAST_STEP = JOINT->LASTSTEP;
+    unsigned long STEPS = JOINT->STEPS;
+
 
     // speed should be given in 0-10 settings but what dimensions???
     // use this to calculate interval 0-99 rpm?
 
-    
+    long INTERVAL = 60/SPEED*STEPS;
 
+    if(STEPCOUNT > 0){
+        if(CurrentTime - LAST_STEP > INTERVAL) {
+            //do the step ting, i guess toggle the pin state of the step pin
+            int pinState = digitalRead(STEP_PIN);
+            digitalWrite(STEP_PIN, pinState);
+            STEPCOUNT -= 1;
 
+            // but how do we handle the joint angles?
+            // calculate it every time the joint steps but do state management only when a command enters
+            // lets assume 6400 steps per revolution, use the 32 division factor
+
+            float Angle = JOINT->ANGLE_TRUE;
+            if(DIR = 1){
+                Angle -= ratio;
+            }
+            if(DIR = 0){
+                Angle +- ratio;
+
+            }
+        }
+    }
 }
 
 //homing functions
@@ -157,19 +183,36 @@ void wristHoming() {
     // take steps and count until blockage passes 
     for(;;){
         int Trigger_Status = digitalRead(LASER_TRIGGER);
-
-        
+  
     }
     
 }
 
-void stateControls(){
+void stateControls(JOINTStruct* JOINT){
     // this code will guess the approx angle of the joint
     // check if each joint is up to date
     // only call this code when new state is requested
     // this will compare ideal with actual state and apply the speed settings
     // this will also apply the direction
+    
+    float Ideal_Angle = JOINT->ANGLE_IDEAL;
+    float Actual_Angle = JOINT->ANGLE_TRUE;
+    float Ratio = JOINT->STEP_FACTOR;
+    if(Ideal_Angle = Actual_Angle){
+        return;
+    }
+    else {
+        unsigned long steps = (Ideal_Angle-Actual_Angle)*Ratio;
+        JOINT->STEPS = steps;
+        Serial.println(steps);
 
+        if(Ideal_Angle>Actual_Angle){
+            JOINT->DIR = 1;
+        }
+        if(Ideal_Angle<Actual_Angle){
+            JOINT->DIR = 0;
+        }
+    }
     
 }
 
@@ -224,6 +267,7 @@ char read_uart_string(char *buffer) {
   }
 }
 
+// this function is just to test if sending back to the system still works. 
 void send_hello_world(void) {
   const char *message_ptr = hello_world_message;
   while (*message_ptr) {
@@ -266,15 +310,27 @@ int inputHandler(char *inputString) {
 
         // this only sets ideal state and speed
 
+        // we can calculate angles in post for 0 degrees and etc. 
+
+        if (inputString[0] == 'T') {
+            // generally this command is just going to be for tool head control
+            // commands taken in will be pretty dependent on the kind of tool head mounted though
+            
+            // example commands for the claw: 
+        }
+
         if (inputString[0] == 'J') {
             JOINTStruct INCOMINGJointCommand;
+            char Speed = inputString[6];
+            char Angle = inputString[2];
+
+
 
             send_hello_world(); 
             if (inputString[1] == '1') { 
                 send_hello_world();
             }
 
-            char Speed = inputString[6];
 
 
             // start passing data from input string to joint 
