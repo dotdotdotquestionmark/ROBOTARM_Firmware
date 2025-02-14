@@ -3,12 +3,15 @@
 #include <util/delay.h>
 #include "motordriver.h"
 #include "TMCStepper.h"
-#include "string.h"
+#include <string.h>
+#include <stdlib.h>
 
 using namespace std;
 
 #define F_CPU 16000000UL // Adjust clock frequency as needed
-#define MAX_STRING_LENGTH 64 // Adjust this value as needed
+#define MAX_STRING_LENGTH 100 // Adjust this value as needed
+#define BAUD 115200
+#define UBRR0_VALUE ((F_CPU / (8UL * BAUD)) - 1) 
 
 // these addresses may no longer be relevant
 #define TEST_PIN PORTB7
@@ -49,6 +52,7 @@ using namespace std;
 
 //#define CONTROL_BIT 1 // Corresponds to bit 1 of Port B
 
+String receivedString;
 
 struct JOINTStruct {
     uint8_t STEP_PIN;
@@ -149,13 +153,12 @@ void motorDriver(JOINTStruct* JOINT) {
             // lets assume 6400 steps per revolution, use the 32 division factor
 
             float Angle = JOINT->ANGLE_TRUE;
-            if(DIR = 1){
-                Angle -= ratio;
+            if (DIR == HIGH) {
+                Angle -= ratio; // Decrease Angle by the ratio
+            } else if (DIR == LOW) {
+                Angle += ratio; // Increase Angle by the ratio
             }
-            if(DIR = 0){
-                Angle +- ratio;
-
-            }
+            Serial.println(Angle); // Print the Angle value
         }
     }
 }
@@ -198,7 +201,7 @@ void stateControls(JOINTStruct* JOINT){
     float Ideal_Angle = JOINT->ANGLE_IDEAL;
     float Actual_Angle = JOINT->ANGLE_TRUE;
     float Ratio = JOINT->STEP_FACTOR;
-    if(Ideal_Angle = Actual_Angle){
+    if (Ideal_Angle == Actual_Angle) {
         return;
     }
     else {
@@ -216,96 +219,102 @@ void stateControls(JOINTStruct* JOINT){
     
 }
 
-void uart0_init(uint32_t baud) {
-    // Calculate UBRR value based on baud rate and clock frequency
-    uint16_t ubrr = (F_CPU / (16UL * baud)) - 1;
+void USART_Init() {
     // Set baud rate
-    UBRR0H = (uint8_t)(ubrr >> 8);
-    UBRR0L = (uint8_t)ubrr;
-    // Configure data format (8N1)
-    UCSR0C = (1 << UCSZ01) | (1 << UCSZ00);
+    UBRR0H = (uint8_t)(UBRR0_VALUE >> 8);
+    UBRR0L = (uint8_t)(UBRR0_VALUE);
+
+    // Enable double-speed mode
+    UCSR0A = (1 << U2X0);
+
     // Enable transmitter and receiver
     UCSR0B = (1 << TXEN0) | (1 << RXEN0);
+
+    // Set frame format: 8 data bits, 1 stop bit, no parity
+    UCSR0C = (1 << UCSZ01) | (1 << UCSZ00);
 }
 
-void uart0_transmit(unsigned char data) {
-  // Wait for empty transmit buffer
-  while (!(UCSR0A & (1 << UDRE0)));
-  UDR0 = data;
+void USART_Transmit(char data) {
+    // Wait for the transmit buffer to be empty
+    while (!(UCSR0A & (1 << UDRE0)));
+
+    // Put data into the buffer, sends the data
+    UDR0 = data;
 }
 
-char uart0_receive() {
+void USART_SendString(const char* str) {
+    while (*str) {
+        USART_Transmit(*str++);
+    }
+}
+
+char USART_Receive() {
     // Wait for data to be received
     while (!(UCSR0A & (1 << RXC0)));
-    // Read and return data
+    // Return received data
     return UDR0;
 }
 
-const char *hello_world_message = "Hello World\r\n";
-const char *second_test_message = "shalom stan\r\n";
-const char *third_test_message = "test3 successful\r\n";
-
-char*inputstring = "";
+char *inputString;
 
 
+void USART_ReceiveString(char* buffer, uint8_t max_length) {
+    uint8_t index = 0;
+    char received_char;
 
-char read_uart_string(char *buffer) {
-  int index = 0;
-  unsigned char received_char;
+    // Read characters until newline or buffer is full
+    while (index < max_length - 1) {
+        received_char = USART_Receive();
 
-  // Read characters until newline or buffer full
-  while ((received_char = uart0_receive()) != '\n' && index < MAX_STRING_LENGTH - 1) {
-    buffer[index++] = received_char;
-  }
-
-  // Add null terminator if string is not empty
-  if (index > 0) {
+        // Check for newline (end of string)
+        if (received_char == '\n' || received_char == '\r') {
+            break;
+        }
+        // Store the received character
+        buffer[index++] = received_char;
+    }
+    // Null-terminate the string
     buffer[index] = '\0';
-    return 1; // Indicate successful string reception
-  } else {
-    return 0; // Indicate no characters received or buffer full
-  }
 }
 
-// this function is just to test if sending back to the system still works. 
-void send_hello_world(void) {
-  const char *message_ptr = hello_world_message;
-  while (*message_ptr) {
-    uart0_transmit(*message_ptr++);
-  }
+int ExtractIntegerFromSubstring(const char* str, uint8_t start, uint8_t end) {
+    char substring[10]; // Buffer to hold the substring
+    uint8_t length = end - start + 1; // Length of the substring
+
+    // Copy the substring from the original string
+    strncpy(substring, str + start, length);
+    substring[length] = '\0'; // Null-terminate the substring
+
+    // Convert the substring to an integer
+    return atoi(substring);
 }
 
-void setup() {
 
-    uart0_init(9600);
-    // set register input output mode 
-    // setting data directions
-    DDRB |= (1 << DDB0);
-    DDRB |= (1 << DDB7);
-    DDRG |= (1 << DDG0);
-    DDRC |= (1 << DDC2);
-    DDRC |= (1 << DDC4);
-    DDRC |= (1 << DDC5);
-    DDRL |= (1 << DDL2);
+void initialize() {
+
+    USART_Init();
+
+
+    // DDRB |= (1 << DDB0);
+    // DDRB |= (1 << DDB7);
+    // DDRG |= (1 << DDG0);
+    // DDRC |= (1 << DDC2);
+    // DDRC |= (1 << DDC4);
+    // DDRC |= (1 << DDC5);
+    // DDRL |= (1 << DDL2);
     pinMode(LASER_PIN, OUTPUT);
     pinMode(LASER_TRIGGER, INPUT);
-
+    
 } 
 
 int inputHandler(char *inputString) {
         if (read_uart_string(inputString)) {
         // Grip/Release commands to engage hand
-        
-        // Check if the first character is 'A'
-        // command structure example for axis1, 
-        // A1M360H100
-
         // command types
         // J1P Joint 1 Position
         // J1090005 joint 1 to 90.0 speed of 05rpm
         // J2180010 Joint 2 to 180.0 speed of 10rpm
         // J2180099 Joint 2 to 180.0 speed of 99 rpm
-
         // clean this code later, make it work first. 
 
         // this only sets ideal state and speed
@@ -315,47 +324,86 @@ int inputHandler(char *inputString) {
         if (inputString[0] == 'T') {
             // generally this command is just going to be for tool head control
             // commands taken in will be pretty dependent on the kind of tool head mounted though
-            
             // example commands for the claw: 
+            uart_transmit(second_test_message);
+
+            char character = inputString[0];
+            char* character_ptr = &inputString[2]; 
+            
         }
 
         if (inputString[0] == 'J') {
+            send_hello_world();
             JOINTStruct INCOMINGJointCommand;
-            char Speed = inputString[6];
-            char Angle = inputString[2];
+            // i say we say fuck it and just construct here. 
+            int JOINTID = inputString[1];
+            // angle contructor 
+            int Angle_Hundred = 0;//inputString[2];
+            char Angle_Ten = inputString[3];
+            int Angle_One = 1;//inputString[4];
+            int Angle_Tenth = 0;//inputString[5];
 
+            int ANGLE = (Angle_Hundred*100)+(Angle_Ten*10)+(Angle_One);
 
+            // Convert the float to a character array
+            char angleTest[10];
 
-            send_hello_world(); 
-            if (inputString[1] == '1') { 
-                send_hello_world();
-            }
+            char* Angle_Tenx = &Angle_Ten;
 
+            itoa(ANGLE, angleTest, 10);
 
 
             // start passing data from input string to joint 
-            INCOMING -> SPEED = Speed;
+            
+            //INCOMING -> SPEED = Speed;
 
             // gather the speed param 
 
-
         }
-
-        
     }
 }
 
+int inputHandler0(){
+    //Serial.println("shalom stanley");
+    if (Serial.available() > 0) {   // check if data is available
+    char inChar = Serial.read();  // read the incoming byte
+
+
+    if (inChar != '\n') {         // if it's not a newline character
+      receivedString += inChar;      // add the incoming byte to the string
+    } else {
+      Serial.println(receivedString);
+
+      if (receivedString == "V1H") {
+        // turn on Valve 1
+        Serial.println("moshi moshi");
+
+        }
+
+        receivedString = "";
+
+
+        }
+    }
+
+    return(0);
+}
+
+
 int main(void) {
+
     char receivedString[MAX_STRING_LENGTH];
-    setup();
+    initialize();
+
     // main loop
-    while(1) {
-        inputHandler(receivedString);
+    while(true) {
+        // Com Handling Code
+        inputHandler(inputString);
         // motor handling code
     }
-    return 0;
+    return(0);
 }
 
 // you need the structures to serve as a state bank.
 // if current and target is not the same keep rotating until you hit the target
-// use a steps to angle calculator to figure out where your true angle is. 
+// use a steps to angle calculator to figure out where your true angle is.
