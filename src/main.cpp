@@ -277,7 +277,7 @@ void USART_ReceiveString(char* buffer, uint8_t max_length) {
     buffer[index] = '\0';
 }
 
-int ExtractIntegerFromSubstring(const char* str, uint8_t start, uint8_t end) {
+int integerExtract(const char* str, uint8_t start, uint8_t end) {
     char substring[10]; // Buffer to hold the substring
     uint8_t length = end - start + 1; // Length of the substring
 
@@ -333,24 +333,18 @@ int inputHandler(char *inputString) {
         }
 
         if (inputString[0] == 'J') {
-            send_hello_world();
             JOINTStruct INCOMINGJointCommand;
             // i say we say fuck it and just construct here. 
             int JOINTID = inputString[1];
             // angle contructor 
-            int Angle_Hundred = 0;//inputString[2];
-            char Angle_Ten = inputString[3];
-            int Angle_One = 1;//inputString[4];
-            int Angle_Tenth = 0;//inputString[5];
+            float commandAngle = integerExtract(inputString, 2, 4);
+            float commandSpeed = integerExtract(inputString, 5, 7);
+            char commandDirection = inputString[8];
 
-            int ANGLE = (Angle_Hundred*100)+(Angle_Ten*10)+(Angle_One);
+            INCOMINGJointCommand->ANGLEIDEAL = commandAngle;
+            INCOMINGJointCommand->SPEED = commandSpeed;
 
-            // Convert the float to a character array
-            char angleTest[10];
-
-            char* Angle_Tenx = &Angle_Ten;
-
-            itoa(ANGLE, angleTest, 10);
+            
 
 
             // start passing data from input string to joint 
@@ -361,33 +355,8 @@ int inputHandler(char *inputString) {
 
         }
     }
-}
-
-int inputHandler0(){
-    //Serial.println("shalom stanley");
-    if (Serial.available() > 0) {   // check if data is available
-    char inChar = Serial.read();  // read the incoming byte
 
 
-    if (inChar != '\n') {         // if it's not a newline character
-      receivedString += inChar;      // add the incoming byte to the string
-    } else {
-      Serial.println(receivedString);
-
-      if (receivedString == "V1H") {
-        // turn on Valve 1
-        Serial.println("moshi moshi");
-
-        }
-
-        receivedString = "";
-
-
-        }
-    }
-
-    return(0);
-}
 
 
 int main(void) {
