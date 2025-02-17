@@ -52,6 +52,8 @@ using namespace std;
 
 //#define CONTROL_BIT 1 // Corresponds to bit 1 of Port B
 
+char *inputString;
+
 String receivedString;
 
 struct JOINTStruct {
@@ -62,8 +64,8 @@ struct JOINTStruct {
     long STEPS; // amount of moves
     long SPEED; // interval
     bool STATE; // active or not
-    float ANGLE_TRUE;
-    float ANGLE_IDEAL;
+    int ANGLE_TRUE;
+    int ANGLE_IDEAL;
     bool HOMESTATUS;
     unsigned long LASTSTEP;
     float STEP_FACTOR; // the amount of degrees each step will change the joint
@@ -81,6 +83,8 @@ JOINTStruct* SHOULDER = &ShoulderJoint;
 JOINTStruct* ELBOW = &ElbowJoint;
 JOINTStruct* FOREARM = &ForearmJoint;
 JOINTStruct* INCOMING = &INCOMINGJointCommand;
+
+JOINTStruct* JOINTARRAY[6] = {BASE, SHOULDER, ELBOW, FOREARM};
 
 void jointAssignment(){
     // assign base values
@@ -255,7 +259,6 @@ char USART_Receive() {
     return UDR0;
 }
 
-char *inputString;
 
 
 void USART_ReceiveString(char* buffer, uint8_t max_length) {
@@ -307,51 +310,85 @@ void initialize() {
     
 } 
 
-int inputHandler(char *inputString) {
-        if (read_uart_string(inputString)) {
-        // Grip/Release commands to engage hand
+void inputHandler(char *inputString) {
+        USART_ReceiveString(inputString, MAX_STRING_LENGTH);
         // command types
-        // J1P Joint 1 Position
         // J1090005 joint 1 to 90.0 speed of 05rpm
         // J2180010 Joint 2 to 180.0 speed of 10rpm
-        // J2180099 Joint 2 to 180.0 speed of 99 rpm
         // clean this code later, make it work first. 
-
         // this only sets ideal state and speed
-
         // we can calculate angles in post for 0 degrees and etc. 
 
-        if (inputString[0] == 'T') {
-            // generally this command is just going to be for tool head control
-            // commands taken in will be pretty dependent on the kind of tool head mounted though
-            // example commands for the claw: 
-            uart_transmit(second_test_message);
-
-            char character = inputString[0];
-            char* character_ptr = &inputString[2]; 
-            
-        }
-
         if (inputString[0] == 'J') {
-            JOINTStruct INCOMINGJointCommand;
             // i say we say fuck it and just construct here. 
-            int JOINTID = inputString[1];
+
+            //USART_SendString("Enter a string: "); 
+
+            char testString[2]; 
+
+            char JOINTIDChar = inputString[1] - '0'; 
+
+            //JOINTIDChar -= '0'; //make it int usable by removing the extra 0
+
+            int JOINTID = JOINTIDChar; 
+
+            itoa(JOINTID, testString, 10); 
+
+            USART_SendString("joint id number: "); 
+            USART_SendString(testString); 
+
+
+            USART_SendString("\r\n"); 
+
+            // you need to convert this to an integer before calling a string 
             // angle contructor 
-            float commandAngle = integerExtract(inputString, 2, 4);
-            float commandSpeed = integerExtract(inputString, 5, 7);
-            char commandDirection = inputString[8];
+            int commandAngle = integerExtract(inputString, 2, 4);
+            int commandSpeed = integerExtract(inputString, 5, 7);
 
-            INCOMINGJointCommand->ANGLEIDEAL = commandAngle;
-            INCOMINGJointCommand->SPEED = commandSpeed;
+            // send it to joint
 
-            
+            JOINTARRAY[JOINTID]->ANGLE_IDEAL = commandAngle;
+            JOINTARRAY[JOINTID]->SPEED = commandSpeed;
 
+            // print your joint states
 
             // start passing data from input string to joint 
             
             //INCOMING -> SPEED = Speed;
 
-            // gather the speed param 
+            // check if write worked
+            int SHOULDERANGLE = SHOULDER->ANGLE_IDEAL;
+            int SPEEDSETTING = SHOULDER->SPEED;
+            char buffer[10]; // Adjust the size as needed
+            char buffer2[10];
+
+            itoa(SHOULDERANGLE, buffer, 10); // Convert integer to string
+            itoa(SPEEDSETTING, buffer2, 10);
+            USART_SendString("Joint Angle: "); 
+            USART_SendString(buffer);            
+            USART_SendString("\r\n"); 
+
+            USART_SendString("Joint Speed: "); 
+            USART_SendString(buffer2);
+            USART_SendString("\r\n"); 
+            USART_SendString("\r\n"); 
+
+
+            int ELBOWANGLE = ELBOW->ANGLE_IDEAL;
+            int ELBOWSPEEDSETTING = ELBOW->SPEED;
+            char buffer3[10]; // Adjust the size as needed
+            char buffer4[10];
+
+            itoa(ELBOWANGLE, buffer3, 10); // Convert integer to string
+            itoa(ELBOWSPEEDSETTING, buffer4, 10);
+            USART_SendString("Joint 2 Angle: "); 
+            USART_SendString(buffer3);            
+            USART_SendString("\r\n"); 
+
+            USART_SendString("Joint 2 Speed: "); 
+            USART_SendString(buffer4);
+            USART_SendString("\r\n"); 
+            USART_SendString("\r\n"); 
 
         }
     }
@@ -372,6 +409,8 @@ int main(void) {
     }
     return(0);
 }
+
+
 
 // you need the structures to serve as a state bank.
 // if current and target is not the same keep rotating until you hit the target
