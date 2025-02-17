@@ -266,7 +266,7 @@ void USART_ReceiveString(char* buffer, uint8_t max_length) {
     char received_char;
 
     // Read characters until newline or buffer is full
-    while (index < max_length - 1) {
+    while (index < max_length) {
         received_char = USART_Receive();
 
         // Check for newline (end of string)
@@ -277,16 +277,24 @@ void USART_ReceiveString(char* buffer, uint8_t max_length) {
         buffer[index++] = received_char;
     }
     // Null-terminate the string
-    buffer[index] = '\0';
+    buffer[index+1] = '\0';
+    USART_SendString(buffer);
+    USART_SendString("\n");
+
+
 }
 
 int integerExtract(const char* str, uint8_t start, uint8_t end) {
     char substring[10]; // Buffer to hold the substring
     uint8_t length = end - start + 1; // Length of the substring
+    //USART_SendString(str);
+    USART_SendString("\n");
+
+
 
     // Copy the substring from the original string
     strncpy(substring, str + start, length);
-    substring[length] = '\0'; // Null-terminate the substring
+    substring[length+1] = '\0'; // Null-terminate the substring
 
     // Convert the substring to an integer
     return atoi(substring);
@@ -389,6 +397,8 @@ void inputHandler(char *inputString) {
             USART_SendString(buffer4);
             USART_SendString("\r\n"); 
             USART_SendString("\r\n"); 
+
+            inputString = "";
 
         }
     }
