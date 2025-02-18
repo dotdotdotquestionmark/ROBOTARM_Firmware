@@ -76,15 +76,12 @@ JOINTStruct ShoulderJoint;
 JOINTStruct ElbowJoint;
 JOINTStruct ForearmJoint;
 
-JOINTStruct INCOMINGJointCommand;
-
 JOINTStruct* BASE = &BaseJoint;
 JOINTStruct* SHOULDER = &ShoulderJoint;
 JOINTStruct* ELBOW = &ElbowJoint;
 JOINTStruct* FOREARM = &ForearmJoint;
-JOINTStruct* INCOMING = &INCOMINGJointCommand;
 
-JOINTStruct* JOINTARRAY[6] = {BASE, SHOULDER, ELBOW, FOREARM};
+JOINTStruct* JOINTARRAY[4] = {BASE, SHOULDER, ELBOW, FOREARM};
 
 void jointAssignment(){
     // assign base values
@@ -300,10 +297,40 @@ int integerExtract(const char* str, uint8_t start, uint8_t end) {
     return atoi(substring);
 }
 
+void stateCheck(){
+    for(int joint=1; joint<5; joint++){
+        JOINTStruct* CURRENTJOINT = JOINTARRAY[joint];
+
+        int ANGLE = CURRENTJOINT->ANGLE_IDEAL;
+        int SPEEDSETTING = CURRENTJOINT->SPEED;
+        char buffer[10]; // Adjust the size as needed
+        char buffer1[10];
+        char jointid[10];
+
+        itoa(joint, jointid, 10);
+        itoa(ANGLE, buffer, 10); // Convert integer to string
+        itoa(SPEEDSETTING, buffer1, 10);
+
+        USART_SendString("Joint ID: "); 
+        USART_SendString(jointid);            
+        USART_SendString("\r\n"); 
+        USART_SendString("Joint Angle: "); 
+        USART_SendString(buffer);            
+        USART_SendString("\r\n"); 
+
+        USART_SendString("Joint Speed: "); 
+        USART_SendString(buffer1);
+        USART_SendString("\r\n"); 
+        USART_SendString("\r\n"); 
+    }
+}
+
+
 
 void initialize() {
 
     USART_Init();
+    jointAssignment();
 
 
     // DDRB |= (1 << DDB0);
@@ -326,6 +353,10 @@ void inputHandler(char *inputString) {
         // clean this code later, make it work first. 
         // this only sets ideal state and speed
         // we can calculate angles in post for 0 degrees and etc. 
+
+        if (inputString[0] == 'S'){
+            stateCheck();
+        }
 
         if (inputString[0] == 'J') {
             // i say we say fuck it and just construct here. 
@@ -362,47 +393,44 @@ void inputHandler(char *inputString) {
 
             // start passing data from input string to joint 
             
-            //INCOMING -> SPEED = Speed;
-
             // check if write worked
-            int SHOULDERANGLE = SHOULDER->ANGLE_IDEAL;
-            int SPEEDSETTING = SHOULDER->SPEED;
-            char buffer[10]; // Adjust the size as needed
-            char buffer2[10];
+            // int SHOULDERANGLE = SHOULDER->ANGLE_IDEAL;
+            // int SPEEDSETTING = SHOULDER->SPEED;
+            // char buffer[10]; // Adjust the size as needed
+            // char buffer2[10];
 
-            itoa(SHOULDERANGLE, buffer, 10); // Convert integer to string
-            itoa(SPEEDSETTING, buffer2, 10);
-            USART_SendString("Joint Angle: "); 
-            USART_SendString(buffer);            
-            USART_SendString("\r\n"); 
+            // itoa(SHOULDERANGLE, buffer, 10); // Convert integer to string
+            // itoa(SPEEDSETTING, buffer2, 10);
+            // USART_SendString("Joint Angle: "); 
+            // USART_SendString(buffer);            
+            // USART_SendString("\r\n"); 
 
-            USART_SendString("Joint Speed: "); 
-            USART_SendString(buffer2);
-            USART_SendString("\r\n"); 
-            USART_SendString("\r\n"); 
+            // USART_SendString("Joint Speed: "); 
+            // USART_SendString(buffer2);
+            // USART_SendString("\r\n"); 
+            // USART_SendString("\r\n"); 
 
 
-            int ELBOWANGLE = ELBOW->ANGLE_IDEAL;
-            int ELBOWSPEEDSETTING = ELBOW->SPEED;
-            char buffer3[10]; // Adjust the size as needed
-            char buffer4[10];
+            // int ELBOWANGLE = ELBOW->ANGLE_IDEAL;
+            // int ELBOWSPEEDSETTING = ELBOW->SPEED;
+            // char buffer3[10]; // Adjust the size as needed
+            // char buffer4[10];
 
-            itoa(ELBOWANGLE, buffer3, 10); // Convert integer to string
-            itoa(ELBOWSPEEDSETTING, buffer4, 10);
-            USART_SendString("Joint 2 Angle: "); 
-            USART_SendString(buffer3);            
-            USART_SendString("\r\n"); 
+            // itoa(ELBOWANGLE, buffer3, 10); // Convert integer to string
+            // itoa(ELBOWSPEEDSETTING, buffer4, 10);
+            // USART_SendString("Joint 2 Angle: "); 
+            // USART_SendString(buffer3);            
+            // USART_SendString("\r\n"); 
 
-            USART_SendString("Joint 2 Speed: "); 
-            USART_SendString(buffer4);
-            USART_SendString("\r\n"); 
-            USART_SendString("\r\n"); 
+            // USART_SendString("Joint 2 Speed: "); 
+            // USART_SendString(buffer4);
+            // USART_SendString("\r\n"); 
+            // USART_SendString("\r\n"); 
 
             inputString = "";
 
         }
     }
-
 
 
 
