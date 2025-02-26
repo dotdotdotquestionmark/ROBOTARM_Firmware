@@ -13,7 +13,6 @@ using namespace std;
 #define BAUD 115200
 #define UBRR0_VALUE ((F_CPU / (8UL * BAUD)) - 1) 
 
-// these addresses may no longer be relevant
 #define TEST_PIN PORTB7
 
 #define BASE_STEP_PIN PORTB0 // 53
@@ -64,11 +63,11 @@ struct JOINTStruct {
     long STEPS; // amount of moves
     long SPEED; // interval
     bool STATE; // active or not
-    int ANGLE_TRUE;
+    float ANGLE_TRUE;
     int ANGLE_IDEAL;
     bool HOMESTATUS;
     unsigned long LASTSTEP;
-    float STEP_FACTOR; // the amount of degrees each step will change the joint
+    float STEP_FACTOR; // the amount of steps to change 1 degree
 };
 
 JOINTStruct BaseJoint;
@@ -93,8 +92,9 @@ void jointAssignment(){
     BASE -> ANGLE_TRUE;
     BASE -> ANGLE_IDEAL;
     BASE -> HOMESTATUS = false;
+    BASE -> STEP_FACTOR = 100; // placeholder
 
-    //assign shoulder values
+    //assign shoulder values 
     SHOULDER -> STEP_PIN = SHOULDER_STEP_PIN;
     SHOULDER -> DIR_PIN = SHOULDER_DIR_PIN;
     SHOULDER -> ENA_PIN = SHOULDER_ENA_PIN;
@@ -103,6 +103,7 @@ void jointAssignment(){
     SHOULDER -> ANGLE_TRUE;
     SHOULDER -> ANGLE_IDEAL;
     SHOULDER -> HOMESTATUS = false;
+    SHOULDER -> STEP_FACTOR = 500; //placeholder
 
     ELBOW -> STEP_PIN = ELBOW_STEP_PIN; 
     ELBOW -> DIR_PIN = ELBOW_DIR_PIN; 
@@ -112,6 +113,7 @@ void jointAssignment(){
     ELBOW -> ANGLE_TRUE; 
     ELBOW -> ANGLE_IDEAL; 
     ELBOW -> HOMESTATUS = false;
+    ELBOW -> STEP_FACTOR = 200;
 
     FOREARM -> STEP_PIN = FOREARM_STEP_PIN; 
     FOREARM -> DIR_PIN = FOREARM_DIR_PIN; 
@@ -121,6 +123,7 @@ void jointAssignment(){
     FOREARM -> ANGLE_TRUE; 
     FOREARM -> ANGLE_IDEAL; 
     FOREARM -> HOMESTATUS = false;
+    FOREARM -> STEP_FACTOR = 300;
     
 }
 
@@ -132,7 +135,7 @@ void motorDriver(JOINTStruct* JOINT) {
     int SPEED = JOINT -> SPEED;
     unsigned long STEPCOUNT = JOINT -> STEPS;
     uint8_t STEP_PIN = JOINT->STEP_PIN;
-    float ratio = JOINT->STEP_FACTOR;
+    float ratio = JOINT->STEP_FACTOR; //use this to calculate the angle
     unsigned long LAST_STEP = JOINT->LASTSTEP;
     unsigned long STEPS = JOINT->STEPS;
 
@@ -140,7 +143,7 @@ void motorDriver(JOINTStruct* JOINT) {
     // speed should be given in 0-10 settings but what dimensions???
     // use this to calculate interval 0-99 rpm?
 
-    long INTERVAL = 60/SPEED*STEPS;
+    long INTERVAL = 60000/SPEED*ratio;
 
     if(STEPCOUNT > 0){
         if(CurrentTime - LAST_STEP > INTERVAL) {
@@ -148,6 +151,9 @@ void motorDriver(JOINTStruct* JOINT) {
             int pinState = digitalRead(STEP_PIN);
             digitalWrite(STEP_PIN, pinState);
             STEPCOUNT -= 1;
+            char 
+
+
 
             // but how do we handle the joint angles?
             // calculate it every time the joint steps but do state management only when a command enters
@@ -159,9 +165,9 @@ void motorDriver(JOINTStruct* JOINT) {
             } else if (DIR == LOW) {
                 Angle += ratio; // Increase Angle by the ratio
             }
-            Serial.println(Angle); // Print the Angle value
+
         }
-    }
+    } 
 }
 
 //homing functions
@@ -192,33 +198,6 @@ void wristHoming() {
     
 }
 
-void stateControls(JOINTStruct* JOINT){
-    // this code will guess the approx angle of the joint
-    // check if each joint is up to date
-    // only call this code when new state is requested
-    // this will compare ideal with actual state and apply the speed settings
-    // this will also apply the direction
-    
-    float Ideal_Angle = JOINT->ANGLE_IDEAL;
-    float Actual_Angle = JOINT->ANGLE_TRUE;
-    float Ratio = JOINT->STEP_FACTOR;
-    if (Ideal_Angle == Actual_Angle) {
-        return;
-    }
-    else {
-        unsigned long steps = (Ideal_Angle-Actual_Angle)*Ratio;
-        JOINT->STEPS = steps;
-        Serial.println(steps);
-
-        if(Ideal_Angle>Actual_Angle){
-            JOINT->DIR = 1;
-        }
-        if(Ideal_Angle<Actual_Angle){
-            JOINT->DIR = 0;
-        }
-    }
-    
-}
 
 void USART_Init() {
     // Set baud rate
@@ -333,13 +312,13 @@ void initialize() {
     jointAssignment();
 
 
-    // DDRB |= (1 << DDB0);
-    // DDRB |= (1 << DDB7);
-    // DDRG |= (1 << DDG0);
-    // DDRC |= (1 << DDC2);
-    // DDRC |= (1 << DDC4);
-    // DDRC |= (1 << DDC5);
-    // DDRL |= (1 << DDL2);
+    DDRB |= (1 << DDB0);
+    DDRB |= (1 << DDB7);
+    DDRG |= (1 << DDG0);
+    DDRC |= (1 << DDC2);
+    DDRC |= (1 << DDC4);
+    DDRC |= (1 << DDC5);
+    DDRL |= (1 << DDL2);
     pinMode(LASER_PIN, OUTPUT);
     pinMode(LASER_TRIGGER, INPUT);
     
@@ -354,7 +333,15 @@ void inputHandler(char *inputString) {
         // this only sets ideal state and speed
         // we can calculate angles in post for 0 degrees and etc. 
 
+        if (inputString[0] == 'H'){
+            // do the homing
+            char JOINTIDChar = inputString[1] - '0';
+
+            int JOINTID = JOINTIDChar;
+        }
+
         if (inputString[0] == 'S'){
+            // this command checks states of everything
             stateCheck();
         }
 
@@ -375,8 +362,6 @@ void inputHandler(char *inputString) {
 
             USART_SendString("joint id number: "); 
             USART_SendString(testString); 
-
-
             USART_SendString("\r\n"); 
 
             // you need to convert this to an integer before calling a string 
@@ -388,50 +373,42 @@ void inputHandler(char *inputString) {
 
             JOINTARRAY[JOINTID]->ANGLE_IDEAL = commandAngle;
             JOINTARRAY[JOINTID]->SPEED = commandSpeed;
-
-            // print your joint states
-
-            // start passing data from input string to joint 
-            
-            // check if write worked
-            // int SHOULDERANGLE = SHOULDER->ANGLE_IDEAL;
-            // int SPEEDSETTING = SHOULDER->SPEED;
-            // char buffer[10]; // Adjust the size as needed
-            // char buffer2[10];
-
-            // itoa(SHOULDERANGLE, buffer, 10); // Convert integer to string
-            // itoa(SPEEDSETTING, buffer2, 10);
-            // USART_SendString("Joint Angle: "); 
-            // USART_SendString(buffer);            
-            // USART_SendString("\r\n"); 
-
-            // USART_SendString("Joint Speed: "); 
-            // USART_SendString(buffer2);
-            // USART_SendString("\r\n"); 
-            // USART_SendString("\r\n"); 
-
-
-            // int ELBOWANGLE = ELBOW->ANGLE_IDEAL;
-            // int ELBOWSPEEDSETTING = ELBOW->SPEED;
-            // char buffer3[10]; // Adjust the size as needed
-            // char buffer4[10];
-
-            // itoa(ELBOWANGLE, buffer3, 10); // Convert integer to string
-            // itoa(ELBOWSPEEDSETTING, buffer4, 10);
-            // USART_SendString("Joint 2 Angle: "); 
-            // USART_SendString(buffer3);            
-            // USART_SendString("\r\n"); 
-
-            // USART_SendString("Joint 2 Speed: "); 
-            // USART_SendString(buffer4);
-            // USART_SendString("\r\n"); 
-            // USART_SendString("\r\n"); 
-
+            // apply changes to joint
+            stateControls(JOINTARRAY[JOINTID]);
+            // clear input string
             inputString = "";
 
         }
     }
 
+void stateControls(JOINTStruct* JOINT){
+    // run this code everytime a new address is sent. 
+    // this code will guess the approx angle of the joint
+    // check if each joint is up to date
+    // only call this code when new state is requested
+    // this will compare ideal with actual state and apply the speed settings
+    // this will also apply the direction
+
+    // should we use steps? no just do both and see if it breaks 
+    
+    float Ideal_Angle = JOINT->ANGLE_IDEAL;
+    float Actual_Angle = JOINT->ANGLE_TRUE;
+    float Ratio = JOINT->STEP_FACTOR;
+    if (Ideal_Angle == Actual_Angle) {
+        return;
+    }
+    else {
+        unsigned long steps = (Ideal_Angle-Actual_Angle)*Ratio;
+        JOINT->STEPS = steps;
+
+        if(Ideal_Angle>Actual_Angle){
+            JOINT->DIR = 1;
+        }
+        if(Ideal_Angle<Actual_Angle){
+            JOINT->DIR = 0;
+        }
+    }
+}
 
 
 int main(void) {
@@ -444,7 +421,12 @@ int main(void) {
         // Com Handling Code
         inputHandler(inputString);
         // motor handling code
+        motorDriver(BASE);
+        motorDriver(SHOULDER);
+        motorDriver(ELBOW);
+        motorDriver(FOREARM);
     }
+
     return(0);
 }
 
