@@ -1,10 +1,12 @@
 #include <avr/io.h>
 #include "Arduino.h"
 #include <util/delay.h>
-#include "motordriver.h"
-#include "TMCStepper.h"
+//#include "motordriver.h"
+//#include "TMCStepper.h"
 #include <string.h>
 #include <stdlib.h>
+
+//#include a library for a hand tool
 
 using namespace std;
 
@@ -30,14 +32,13 @@ using namespace std;
 #define FOREARM_STEP_PIN PORTL2 // 47
 #define FOREARM_DIR_PIN PORTL4 // 45
 #define FOREARM_ENA_PIN PORTL6 // 43
+#define LASER_PIN 30
+#define LASER_TRIGGER 32
 
 #define WRIST1_PWM_PIN  //
 #define WRIST2_PWM_PIN //
 
 #define GRIPPER_PIN //
-
-#define LASER_PIN 30
-#define LASER_TRIGGER 32
 
 // blue wire outlet is yellow, redwire outlet is purple
 
@@ -127,77 +128,33 @@ void jointAssignment(){
     
 }
 
-void motorDriver(JOINTStruct* JOINT) {  
-    // this function will live in the main loop and manipulate motors on a per need basis
-    // get STEP COUNT, DIRECTION, and SPEED, and last step
-    unsigned long CurrentTime = micros();
-    int DIR = JOINT -> DIR;
-    int SPEED = JOINT -> SPEED;
-    unsigned long STEPCOUNT = JOINT -> STEPS;
-    uint8_t STEP_PIN = JOINT->STEP_PIN;
-    float ratio = JOINT->STEP_FACTOR; //use this to calculate the angle
-    unsigned long LAST_STEP = JOINT->LASTSTEP;
-    unsigned long STEPS = JOINT->STEPS;
-
-
-    // speed should be given in 0-10 settings but what dimensions???
-    // use this to calculate interval 0-99 rpm?
-
-    long INTERVAL = 60000/SPEED*ratio;
-
-    if(STEPCOUNT > 0){
-        if(CurrentTime - LAST_STEP > INTERVAL) {
-            //do the step ting, i guess toggle the pin state of the step pin
-            int pinState = digitalRead(STEP_PIN);
-            digitalWrite(STEP_PIN, pinState);
-            STEPCOUNT -= 1;
-            char 
-
-
-
-            // but how do we handle the joint angles?
-            // calculate it every time the joint steps but do state management only when a command enters
-            // lets assume 6400 steps per revolution, use the 32 division factor
-
-            float Angle = JOINT->ANGLE_TRUE;
-            if (DIR == HIGH) {
-                Angle -= ratio; // Decrease Angle by the ratio
-            } else if (DIR == LOW) {
-                Angle += ratio; // Increase Angle by the ratio
-            }
-
-        }
-    } 
-}
-
-//homing functions
-
-void wristHoming() {
-    // rotate wrist until it hits the home position
-    // turn on laser pin, start receiving laser data 
-    digitalWrite(LASER_PIN, HIGH);
-
-
-    // rotate until laser blockage is detected 
-    for(;;) {
-        int Trigger_Status = digitalRead(LASER_TRIGGER);
-        digitalWrite(FOREARM_STEP_PIN, HIGH);
-        delay(25);
-        digitalWrite(FOREARM_STEP_PIN, LOW);
-        delay(25);
-        if(Trigger_Status == 1) {
-            Serial.println("okay Stanman we detected the stopping pin");
-            break;
-        }
+void ftoa(float value, char* buffer, int decimalPlaces) {
+    // Handle negative numbers
+    if (value < 0) {
+        *buffer++ = '-';
+        value = -value;
     }
-    // take steps and count until blockage passes 
-    for(;;){
-        int Trigger_Status = digitalRead(LASER_TRIGGER);
-  
-    }
-    
-}
 
+    // Extract the integer part
+    int intPart = (int)value;
+    itoa(intPart, buffer, 10); // Convert integer part to string
+    while (*buffer) buffer++; // Move pointer to the end of the integer part
+
+    // Add decimal point
+    *buffer++ = '.';
+
+    // Extract the fractional part
+    float fractionalPart = value - intPart;
+    for (int i = 0; i < decimalPlaces; i++) {
+        fractionalPart *= 10;
+        int digit = (int)fractionalPart;
+        *buffer++ = '0' + digit;
+        fractionalPart -= digit;
+    }
+
+    // Null-terminate the string
+    *buffer = '\0';
+}
 
 void USART_Init() {
     // Set baud rate
@@ -235,8 +192,6 @@ char USART_Receive() {
     return UDR0;
 }
 
-
-
 void USART_ReceiveString(char* buffer, uint8_t max_length) {
     uint8_t index = 0;
     char received_char;
@@ -256,8 +211,6 @@ void USART_ReceiveString(char* buffer, uint8_t max_length) {
     buffer[index+1] = '\0';
     USART_SendString(buffer);
     USART_SendString("\n");
-
-
 }
 
 int integerExtract(const char* str, uint8_t start, uint8_t end) {
@@ -265,8 +218,6 @@ int integerExtract(const char* str, uint8_t start, uint8_t end) {
     uint8_t length = end - start + 1; // Length of the substring
     //USART_SendString(str);
     USART_SendString("\n");
-
-
 
     // Copy the substring from the original string
     strncpy(substring, str + start, length);
@@ -304,7 +255,130 @@ void stateCheck(){
     }
 }
 
+void stateControls(JOINTStruct* JOINT){
+    // run this code everytime a new address is sent. 
+    // this code will guess the approx angle of the joint
+    // check if each joint is up to date
+    // only call this code when new state is requested
+    // this will compare ideal with actual state and apply the speed settings
+    // this will also apply the direction
 
+    // should we use steps? no just do both and see if it breaks 
+    
+    float Ideal_Angle = JOINT->ANGLE_IDEAL;
+    float Actual_Angle = JOINT->ANGLE_TRUE;
+    float Ratio = JOINT->STEP_FACTOR;
+    if (Ideal_Angle == Actual_Angle) {
+        return;
+    }
+    else {
+        unsigned long steps = (Ideal_Angle-Actual_Angle)*Ratio;
+        char stepsholder[12];
+        ltoa(steps, stepsholder, 10);
+        USART_SendString(stepsholder);
+        JOINT->STEPS = steps;
+
+        if(Ideal_Angle>Actual_Angle){
+            JOINT->DIR = 1;
+        }
+        if(Ideal_Angle<Actual_Angle){
+            JOINT->DIR = 0;
+        }
+    }
+}
+
+void motorDriver(JOINTStruct* JOINT) { 
+    unsigned long STEPCOUNT = JOINT -> STEPS;
+    char printableSteps[12];
+    ltoa(STEPCOUNT, printableSteps, 10);
+    USART_SendString(printableSteps);
+    delay(1000);
+ }
+
+
+void motorDriverold(JOINTStruct* JOINT) {  
+    // this function will live in the main loop and manipulate motors on a per need basis
+    // get STEP COUNT, DIRECTION, and SPEED, and last step
+    unsigned long CurrentTime = micros();
+    int DIR = JOINT -> DIR;
+    int SPEED = JOINT -> SPEED;
+    unsigned long STEPCOUNT = JOINT -> STEPS;
+    uint8_t STEP_PIN = JOINT->STEP_PIN;
+    float ratio = JOINT->STEP_FACTOR; //use this to calculate the angle
+    unsigned long LAST_STEP = JOINT->LASTSTEP;
+
+    // speed should be given in 0-10 settings but what dimensions???
+    // use this to calculate interval 0-99 rpm?
+
+    long INTERVAL = 60000/SPEED*ratio;
+
+    if(STEPCOUNT > 0){
+        if(CurrentTime - LAST_STEP > INTERVAL) {
+            //do the step ting, i guess toggle the pin state of the step pin
+            int pinState = digitalRead(STEP_PIN);
+            digitalWrite(STEP_PIN, pinState);
+            STEPCOUNT -= 1;
+            char printableSteps[12];
+            char printableAngle[12];
+            ltoa(STEPCOUNT, printableSteps, 10);
+            //USART_SendString("Step Count: ");
+            USART_SendString(printableSteps);
+            USART_SendString("/n");
+
+            // but how do we handle the joint angles?
+            // calculate it every time the joint steps but do state management only when a command enters
+            // lets assume 6400 steps per revolution, use the 32 division factor
+
+            float Angle = JOINT->ANGLE_TRUE;
+            if (DIR == HIGH) {
+                Angle -= ratio; // Decrease Angle by the ratio
+            } else if (DIR == LOW) {
+                Angle += ratio; // Increase Angle by the ratio
+            }
+
+            ftoa(Angle, printableAngle, 2);
+            USART_SendString("Angle: ");
+            USART_SendString(printableAngle); 
+        }
+    } 
+}
+
+//homing functions
+
+void wristHoming() {
+    // rotate wrist until it hits the home position
+    // turn on laser pin, start receiving laser data 
+    digitalWrite(LASER_PIN, HIGH);
+
+
+    // rotate until laser blockage is detected 
+    for(;;) {
+        int Trigger_Status = digitalRead(LASER_TRIGGER);
+        digitalWrite(FOREARM_STEP_PIN, HIGH);
+        delay(25);
+        digitalWrite(FOREARM_STEP_PIN, LOW);
+        delay(25);
+        if(Trigger_Status == 1) {
+            Serial.println("okay Stanman we detected the stopping pin");
+            break;
+        }
+    }
+    // take steps and count until blockage passes 
+    for(;;){
+        int Trigger_Status = digitalRead(LASER_TRIGGER);
+  
+    }
+    
+}
+
+int JointHoming(JOINTStruct* JOINT){
+    // using a serial port to check for the values of sensorless homing
+    // we are using sda and scl to read these pins correct? 
+    // once homing is complete set the homed status as "good"
+
+    //some use serial some use i2c....
+    uint8_t pin = JOINT->DIR_PIN;
+}
 
 void initialize() {
 
@@ -381,35 +455,6 @@ void inputHandler(char *inputString) {
         }
     }
 
-void stateControls(JOINTStruct* JOINT){
-    // run this code everytime a new address is sent. 
-    // this code will guess the approx angle of the joint
-    // check if each joint is up to date
-    // only call this code when new state is requested
-    // this will compare ideal with actual state and apply the speed settings
-    // this will also apply the direction
-
-    // should we use steps? no just do both and see if it breaks 
-    
-    float Ideal_Angle = JOINT->ANGLE_IDEAL;
-    float Actual_Angle = JOINT->ANGLE_TRUE;
-    float Ratio = JOINT->STEP_FACTOR;
-    if (Ideal_Angle == Actual_Angle) {
-        return;
-    }
-    else {
-        unsigned long steps = (Ideal_Angle-Actual_Angle)*Ratio;
-        JOINT->STEPS = steps;
-
-        if(Ideal_Angle>Actual_Angle){
-            JOINT->DIR = 1;
-        }
-        if(Ideal_Angle<Actual_Angle){
-            JOINT->DIR = 0;
-        }
-    }
-}
-
 
 int main(void) {
 
@@ -429,8 +474,6 @@ int main(void) {
 
     return(0);
 }
-
-
 
 // you need the structures to serve as a state bank.
 // if current and target is not the same keep rotating until you hit the target
