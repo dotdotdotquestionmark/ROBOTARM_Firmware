@@ -1,10 +1,12 @@
 #include <avr/io.h>
+#include <avr/interrupt.h>
 #include "Arduino.h"
 #include <util/delay.h>
 //#include "motordriver.h"
 //#include "TMCStepper.h"
 #include <string.h>
 #include <stdlib.h>
+#include <stdint.h>
 
 //#include a library for a hand tool
 
@@ -52,9 +54,13 @@ using namespace std;
 
 //#define CONTROL_BIT 1 // Corresponds to bit 1 of Port B
 
+
 char *inputString;
 
 String receivedString;
+
+volatile unsigned long timermillis = 0;
+
 
 struct JOINTStruct {
     uint8_t STEP_PIN;
@@ -82,6 +88,44 @@ JOINTStruct* ELBOW = &ElbowJoint;
 JOINTStruct* FOREARM = &ForearmJoint;
 
 JOINTStruct* JOINTARRAY[4] = {BASE, SHOULDER, ELBOW, FOREARM};
+
+void init_timer3() {
+    // Set Timer3 to normal mode (counts from 0 to 65535)
+    TCCR3A = 0x00;
+
+    // Set prescaler to 64
+    TCCR3B = (1 << CS31) | (1 << CS30);
+
+    // Enable Timer3 overflow interrupt
+    TIMSK3 = (1 << TOIE3);
+
+    // Initialize Timer3 for 1 ms overflow
+    TCNT3 = 65535 - (F_CPU / 64 / 1000) + 1;
+
+    // Enable global interrupts
+    sei();
+}
+
+
+ISR(TIMER3_OVF_vect) {
+    // Increment the millis counter
+    timermillis++;
+
+    // Reset Timer3 for 1 ms overflow
+    TCNT3 = 65535 - (F_CPU / 64 / 1000) + 1;
+}
+
+//millis() function to return elapsed time
+
+unsigned long milliseconds() {
+    unsigned long m;
+    uint8_t oldSREG = SREG; // Save the current interrupt status
+    cli(); // Disable interrupts
+    m = timermillis; // Read the volatile variable
+    SREG = oldSREG; // Restore the interrupt status
+    return m;
+}
+
 
 void jointAssignment(){
     // assign base values
@@ -160,13 +204,10 @@ void USART_Init() {
     // Set baud rate
     UBRR0H = (uint8_t)(UBRR0_VALUE >> 8);
     UBRR0L = (uint8_t)(UBRR0_VALUE);
-
     // Enable double-speed mode
     UCSR0A = (1 << U2X0);
-
     // Enable transmitter and receiver
     UCSR0B = (1 << TXEN0) | (1 << RXEN0);
-
     // Set frame format: 8 data bits, 1 stop bit, no parity
     UCSR0C = (1 << UCSZ01) | (1 << UCSZ00);
 }
@@ -174,7 +215,6 @@ void USART_Init() {
 void USART_Transmit(char data) {
     // Wait for the transmit buffer to be empty
     while (!(UCSR0A & (1 << UDRE0)));
-
     // Put data into the buffer, sends the data
     UDR0 = data;
 }
@@ -225,6 +265,10 @@ int integerExtract(const char* str, uint8_t start, uint8_t end) {
 
     // Convert the substring to an integer
     return atoi(substring);
+}
+
+bool USART_Available() {
+    return (UCSR0A & (1 << RXC0)); // Check if data is available in the receive buffer
 }
 
 void stateCheck(){
@@ -287,43 +331,42 @@ void stateControls(JOINTStruct* JOINT){
     }
 }
 
-void motorDriver(JOINTStruct* JOINT) { 
-    unsigned long STEPCOUNT = JOINT -> STEPS;
-    char printableSteps[12];
-    ltoa(STEPCOUNT, printableSteps, 10);
-    USART_SendString(printableSteps);
-    delay(1000);
- }
 
-
-void motorDriverold(JOINTStruct* JOINT) {  
+void motorDriver(JOINTStruct* JOINT) {  
     // this function will live in the main loop and manipulate motors on a per need basis
     // get STEP COUNT, DIRECTION, and SPEED, and last step
-    unsigned long CurrentTime = micros();
+    unsigned long LAST_STEP = JOINT->LASTSTEP;
+
+    unsigned long CurrentTime = milliseconds();
     int DIR = JOINT -> DIR;
     int SPEED = JOINT -> SPEED;
     unsigned long STEPCOUNT = JOINT -> STEPS;
     uint8_t STEP_PIN = JOINT->STEP_PIN;
     float ratio = JOINT->STEP_FACTOR; //use this to calculate the angle
-    unsigned long LAST_STEP = JOINT->LASTSTEP;
 
     // speed should be given in 0-10 settings but what dimensions???
     // use this to calculate interval 0-99 rpm?
 
-    long INTERVAL = 60000/SPEED*ratio;
+    unsigned long INTERVAL = 1000;
 
     if(STEPCOUNT > 0){
+// investigate this  interval thing
         if(CurrentTime - LAST_STEP > INTERVAL) {
+            USART_SendString("available");
+            USART_SendString("\n");
             //do the step ting, i guess toggle the pin state of the step pin
             int pinState = digitalRead(STEP_PIN);
             digitalWrite(STEP_PIN, pinState);
-            STEPCOUNT -= 1;
+            STEPCOUNT --;
             char printableSteps[12];
             char printableAngle[12];
             ltoa(STEPCOUNT, printableSteps, 10);
-            //USART_SendString("Step Count: ");
+            USART_SendString("Step Count: ");
             USART_SendString(printableSteps);
-            USART_SendString("/n");
+            USART_SendString("\n");
+
+            JOINT->STEPS = STEPCOUNT;
+            JOINT->LASTSTEP = CurrentTime;
 
             // but how do we handle the joint angles?
             // calculate it every time the joint steps but do state management only when a command enters
@@ -339,6 +382,8 @@ void motorDriverold(JOINTStruct* JOINT) {
             ftoa(Angle, printableAngle, 2);
             USART_SendString("Angle: ");
             USART_SendString(printableAngle); 
+            USART_SendString("\n");
+
         }
     } 
 }
@@ -383,6 +428,7 @@ int JointHoming(JOINTStruct* JOINT){
 void initialize() {
 
     USART_Init();
+    init_timer3();
     jointAssignment();
 
 
@@ -395,10 +441,11 @@ void initialize() {
     DDRL |= (1 << DDL2);
     pinMode(LASER_PIN, OUTPUT);
     pinMode(LASER_TRIGGER, INPUT);
-    
+
 } 
 
 void inputHandler(char *inputString) {
+    if(USART_Available()){
         USART_ReceiveString(inputString, MAX_STRING_LENGTH);
         // command types
         // J1090005 joint 1 to 90.0 speed of 05rpm
@@ -452,24 +499,34 @@ void inputHandler(char *inputString) {
             // clear input string
             inputString = "";
 
+        } else {
+            inputString = "";
         }
     }
-
+    }
 
 int main(void) {
-
     char receivedString[MAX_STRING_LENGTH];
+
     initialize();
 
     // main loop
     while(true) {
         // Com Handling Code
+        //USART_SendString("shalom stan");
+        //USART_SendString("\n");
         inputHandler(inputString);
         // motor handling code
         motorDriver(BASE);
         motorDriver(SHOULDER);
         motorDriver(ELBOW);
         motorDriver(FOREARM);
+
+        // unsigned long CurrentTime = milliseconds();
+        // char currenttimeprint[12];
+        // ltoa(CurrentTime, currenttimeprint, 10);
+        // USART_SendString(currenttimeprint);
+        // USART_SendString("\n");
     }
 
     return(0);
