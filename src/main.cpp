@@ -7,6 +7,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <math.h>
 
 //#include a library for a hand tool
 
@@ -42,6 +43,9 @@ using namespace std;
 
 #define GRIPPER_PIN //
 
+#define FLOAT_TOLERANCE 1e-5 // Tolerance for floating-point comparison
+
+
 // blue wire outlet is yellow, redwire outlet is purple
 
 // Pin Definitions
@@ -71,7 +75,7 @@ struct JOINTStruct {
     long SPEED; // interval
     bool STATE; // active or not
     float ANGLE_TRUE;
-    int ANGLE_IDEAL;
+    float ANGLE_IDEAL;
     bool HOMESTATUS;
     unsigned long LASTSTEP;
     float STEP_FACTOR; // the amount of steps to change 1 degree
@@ -132,41 +136,45 @@ void jointAssignment(){
     BASE -> STEP_PIN = BASE_STEP_PIN;
     BASE -> DIR_PIN = BASE_DIR_PIN;
     BASE -> ENA_PIN = BASE_ENA_PIN;
+    BASE -> DIR = 0;
     BASE -> STEPS = 0;
     BASE -> SPEED = 0;
-    BASE -> ANGLE_TRUE;
-    BASE -> ANGLE_IDEAL;
+    BASE -> ANGLE_TRUE = 0;
+    BASE -> ANGLE_IDEAL = 0;
     BASE -> HOMESTATUS = false;
-    BASE -> STEP_FACTOR = 100; // placeholder
+    BASE -> STEP_FACTOR = 100; // placeholder, means number of steps per degree
 
     //assign shoulder values 
     SHOULDER -> STEP_PIN = SHOULDER_STEP_PIN;
     SHOULDER -> DIR_PIN = SHOULDER_DIR_PIN;
     SHOULDER -> ENA_PIN = SHOULDER_ENA_PIN;
+    SHOULDER -> DIR = 0;
     SHOULDER -> STEPS = 0;
     SHOULDER -> SPEED = 0;
-    SHOULDER -> ANGLE_TRUE;
-    SHOULDER -> ANGLE_IDEAL;
+    SHOULDER -> ANGLE_TRUE = 0;
+    SHOULDER -> ANGLE_IDEAL = 0;
     SHOULDER -> HOMESTATUS = false;
     SHOULDER -> STEP_FACTOR = 500; //placeholder
 
     ELBOW -> STEP_PIN = ELBOW_STEP_PIN; 
     ELBOW -> DIR_PIN = ELBOW_DIR_PIN; 
     ELBOW -> ENA_PIN = ELBOW_ENA_PIN; 
+    ELBOW -> DIR = 0;
     ELBOW -> STEPS = 0; 
     ELBOW -> SPEED = 0; 
-    ELBOW -> ANGLE_TRUE; 
-    ELBOW -> ANGLE_IDEAL; 
+    ELBOW -> ANGLE_TRUE = 0; 
+    ELBOW -> ANGLE_IDEAL = 0; 
     ELBOW -> HOMESTATUS = false;
     ELBOW -> STEP_FACTOR = 200;
 
     FOREARM -> STEP_PIN = FOREARM_STEP_PIN; 
     FOREARM -> DIR_PIN = FOREARM_DIR_PIN; 
     FOREARM -> ENA_PIN = FOREARM_ENA_PIN; 
+    FOREARM -> DIR = 0;
     FOREARM -> STEPS = 0; 
     FOREARM -> SPEED = 0; 
-    FOREARM -> ANGLE_TRUE; 
-    FOREARM -> ANGLE_IDEAL; 
+    FOREARM -> ANGLE_TRUE = 0; 
+    FOREARM -> ANGLE_IDEAL = 0; 
     FOREARM -> HOMESTATUS = false;
     FOREARM -> STEP_FACTOR = 300;
     
@@ -299,67 +307,90 @@ void stateCheck(){
     }
 }
 
-void stateControls(JOINTStruct* JOINT){
-    // run this code everytime a new address is sent. 
-    // this code will guess the approx angle of the joint
-    // check if each joint is up to date
-    // only call this code when new state is requested
-    // this will compare ideal with actual state and apply the speed settings
-    // this will also apply the direction
-
-    // should we use steps? no just do both and see if it breaks 
-    
+void stateControls(JOINTStruct* JOINT) {
     float Ideal_Angle = JOINT->ANGLE_IDEAL;
     float Actual_Angle = JOINT->ANGLE_TRUE;
     float Ratio = JOINT->STEP_FACTOR;
-    if (Ideal_Angle == Actual_Angle) {
-        return;
+
+    // Check if the angles are approximately equal
+    if (fabsf(Ideal_Angle - Actual_Angle) <= FLOAT_TOLERANCE) {
+        return; // Angles are close enough, no action needed
     }
     else {
-        unsigned long steps = (Ideal_Angle-Actual_Angle)*Ratio;
-        char stepsholder[12];
-        ltoa(steps, stepsholder, 10);
-        USART_SendString(stepsholder);
-        JOINT->STEPS = steps;
+        // Determine which angle is larger
+        if (Ideal_Angle > Actual_Angle) {
+            USART_SendString("current angle too low\n");
+            //int direction = HIGH;
+            JOINT->DIR = HIGH;
+        }
+        else if (Ideal_Angle < Actual_Angle) {
+            USART_SendString("current angle too high\n");
+            //int direction = LOW;
+            JOINT->DIR = LOW;
+        }
 
-        if(Ideal_Angle>Actual_Angle){
-            JOINT->DIR = 1;
-        }
-        if(Ideal_Angle<Actual_Angle){
-            JOINT->DIR = 0;
-        }
+        // Calculate the angle delta and steps
+        float angleDelta = fabsf(Ideal_Angle - Actual_Angle);
+        unsigned long steps = (unsigned long)(angleDelta * Ratio);
+
+        // Convert values to strings for printing
+        char currentAngleholder[12];
+        char idealAngleholder[12];
+        char printableDelta[12];
+        char stepsholder[12];
+        char ratioHolder[12];
+
+        ltoa(steps, stepsholder, 10);
+        ltoa((long)Ratio, ratioHolder, 10); // Cast Ratio to long for ltoa
+        ftoa(angleDelta, printableDelta, 4);
+        ftoa(Ideal_Angle, idealAngleholder, 4);
+        ftoa(Actual_Angle, currentAngleholder, 4);
+
+        // Send data via USART
+        USART_SendString(stepsholder);
+        USART_SendString("\n");
+        USART_SendString("Current Angle: ");
+        USART_SendString(currentAngleholder);
+        USART_SendString("\n");
+        USART_SendString("Ideal Angle: ");
+        USART_SendString(idealAngleholder);
+        USART_SendString("\n");
+        USART_SendString(printableDelta);
+        USART_SendString("\n");
+        USART_SendString(ratioHolder);
+        USART_SendString("\n");
+
+        // Update the joint's steps
+        JOINT->STEPS = steps;
     }
 }
-
 
 void motorDriver(JOINTStruct* JOINT) {  
     // this function will live in the main loop and manipulate motors on a per need basis
     // get STEP COUNT, DIRECTION, and SPEED, and last step
     unsigned long LAST_STEP = JOINT->LASTSTEP;
-
     unsigned long CurrentTime = milliseconds();
     int DIR = JOINT -> DIR;
     int SPEED = JOINT -> SPEED;
     unsigned long STEPCOUNT = JOINT -> STEPS;
     uint8_t STEP_PIN = JOINT->STEP_PIN;
     float ratio = JOINT->STEP_FACTOR; //use this to calculate the angle
-
     // speed should be given in 0-10 settings but what dimensions???
     // use this to calculate interval 0-99 rpm?
+    unsigned long INTERVAL = 10;
 
-    unsigned long INTERVAL = 1000;
-
-    if(STEPCOUNT > 0){
-// investigate this  interval thing
+    if(STEPCOUNT > 0) {
+    // investigate this  interval thing
         if(CurrentTime - LAST_STEP > INTERVAL) {
             USART_SendString("available");
             USART_SendString("\n");
-            //do the step ting, i guess toggle the pin state of the step pin
+            //do the step thing, i guess toggle the pin state of the step pin
             int pinState = digitalRead(STEP_PIN);
             digitalWrite(STEP_PIN, pinState);
             STEPCOUNT --;
             char printableSteps[12];
             char printableAngle[12];
+            char printableDir[12];
             ltoa(STEPCOUNT, printableSteps, 10);
             USART_SendString("Step Count: ");
             USART_SendString(printableSteps);
@@ -367,23 +398,34 @@ void motorDriver(JOINTStruct* JOINT) {
 
             JOINT->STEPS = STEPCOUNT;
             JOINT->LASTSTEP = CurrentTime;
+            int directionValue = JOINT->DIR;
+            
+
+            itoa(directionValue, printableDir, 10);
+            USART_SendString("directional value: ");
+            USART_SendString(printableDir);
+            USART_SendString("\n");
 
             // but how do we handle the joint angles?
             // calculate it every time the joint steps but do state management only when a command enters
             // lets assume 6400 steps per revolution, use the 32 division factor
 
             float Angle = JOINT->ANGLE_TRUE;
-            if (DIR == HIGH) {
-                Angle -= ratio; // Decrease Angle by the ratio
-            } else if (DIR == LOW) {
-                Angle += ratio; // Increase Angle by the ratio
-            }
 
+            if (DIR < 1) {
+                Angle -= 1/ratio; // Decrease Angle by the ratio
+                USART_SendString("direction is LOW");
+                USART_SendString("\n");
+            } else if (DIR > 0) {
+                Angle += 1/ratio; // Increase Angle by the ratio
+                USART_SendString("direction is HIGH");
+                USART_SendString("\n");
+            }
             ftoa(Angle, printableAngle, 2);
-            USART_SendString("Angle: ");
+            USART_SendString("Current Angle: ");
             USART_SendString(printableAngle); 
             USART_SendString("\n");
-
+            JOINT->ANGLE_TRUE = Angle;
         }
     } 
 }
@@ -411,7 +453,6 @@ void wristHoming() {
     // take steps and count until blockage passes 
     for(;;){
         int Trigger_Status = digitalRead(LASER_TRIGGER);
-  
     }
     
 }
@@ -430,7 +471,6 @@ void initialize() {
     USART_Init();
     init_timer3();
     jointAssignment();
-
 
     DDRB |= (1 << DDB0);
     DDRB |= (1 << DDB7);
@@ -513,8 +553,7 @@ int main(void) {
     // main loop
     while(true) {
         // Com Handling Code
-        //USART_SendString("shalom stan");
-        //USART_SendString("\n");
+
         inputHandler(inputString);
         // motor handling code
         motorDriver(BASE);
@@ -522,11 +561,6 @@ int main(void) {
         motorDriver(ELBOW);
         motorDriver(FOREARM);
 
-        // unsigned long CurrentTime = milliseconds();
-        // char currenttimeprint[12];
-        // ltoa(CurrentTime, currenttimeprint, 10);
-        // USART_SendString(currenttimeprint);
-        // USART_SendString("\n");
     }
 
     return(0);
