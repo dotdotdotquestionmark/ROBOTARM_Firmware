@@ -3,11 +3,16 @@
 #include "Arduino.h"
 #include <util/delay.h>
 //#include "motordriver.h"
-//#include "TMCStepper.h"
+//#include <TMCStepper.h>
+//#include <TMCStepper_UTILITY.h> 
 #include <string.h>
 #include <stdlib.h>
 #include <stdint.h>
 #include <math.h>
+
+#define R_SENSE 0.075f // Match to your driver
+
+
 
 //#include a library for a hand tool
 
@@ -20,23 +25,32 @@ using namespace std;
 
 #define TEST_PIN PORTB7
 
-#define BASE_STEP_PIN PORTB0 // 53
-#define BASE_DIR_PIN PORTB2 // 51
-#define BASE_ENA_PIN PORTL0 // 49
+#define MISO_PIN 50
+#define MOSI_PIN 51
+#define SCK_PIN 52
 
-#define SHOULDER_STEP_PIN PORTG0 //41
-#define SHOULDER_DIR_PIN PORTG2 // 39
-#define SHOULDER_ENA_PIN PORTC0 // 37
+#define BASE_STEP_PIN 34
+#define BASE_DIR_PIN 30
+#define BASE_ENA_PIN 22
+#define BASE_CS_PIN 26
 
-#define ELBOW_STEP_PIN PORTC2 //35
-#define ELBOW_DIR_PIN  PORTC4 // 33
-#define ELBOW_ENA_PIN PORTC6 // 31
+#define SHOULDER_STEP_PIN 35
+#define SHOULDER_DIR_PIN 31
+#define SHOULDER_ENA_PIN 23
+#define SHOULDER_CS_PIN 27
 
-#define FOREARM_STEP_PIN PORTL2 // 47
-#define FOREARM_DIR_PIN PORTL4 // 45
-#define FOREARM_ENA_PIN PORTL6 // 43
-#define LASER_PIN 30
-#define LASER_TRIGGER 32
+#define ELBOW_STEP_PIN 36
+#define ELBOW_DIR_PIN 32
+#define ELBOW_ENA_PIN 24
+#define ELBOW_CS_PIN 28
+
+#define FOREARM_STEP_PIN 37
+#define FOREARM_DIR_PIN 33
+#define FOREARM_ENA_PIN 25
+#define FOREARM_CS_PIN 29
+
+#define LASER_PIN 38
+#define LASER_TRIGGER 39
 
 #define WRIST1_PWM_PIN  //
 #define WRIST2_PWM_PIN //
@@ -65,6 +79,7 @@ String receivedString;
 
 volatile unsigned long timermillis = 0;
 
+//TMC5160Stepper driver = TMC5160Stepper(BASE_CS_PIN, R_SENSE);
 
 struct JOINTStruct {
     uint8_t STEP_PIN;
@@ -467,6 +482,8 @@ int JointHoming(JOINTStruct* JOINT){
 }
 
 void initialize() {
+    //SPI.begin();
+    
 
     USART_Init();
     init_timer3();
@@ -509,14 +526,9 @@ void inputHandler(char *inputString) {
         if (inputString[0] == 'J') {
             // i say we say fuck it and just construct here. 
 
-            //USART_SendString("Enter a string: "); 
-
             char testString[2]; 
 
             char JOINTIDChar = inputString[1] - '0'; 
-
-            //JOINTIDChar -= '0'; //make it int usable by removing the extra 0
-
             int JOINTID = JOINTIDChar; 
 
             itoa(JOINTID, testString, 10); 
