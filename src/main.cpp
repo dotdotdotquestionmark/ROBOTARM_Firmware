@@ -2,19 +2,15 @@
 #include <avr/interrupt.h>
 #include "Arduino.h"
 #include <util/delay.h>
-//#include "motordriver.h"
-//#include <TMCStepper.h>
-//#include <TMCStepper_UTILITY.h> 
+#include <TMCStepper.h>
+#include <TMCStepper_UTILITY.h> 
 #include <string.h>
 #include <stdlib.h>
 #include <stdint.h>
 #include <math.h>
+#include <SPI.h>
 
 #define R_SENSE 0.075f // Match to your driver
-
-
-
-//#include a library for a hand tool
 
 using namespace std;
 
@@ -22,8 +18,6 @@ using namespace std;
 #define MAX_STRING_LENGTH 100 // Adjust this value as needed
 #define BAUD 115200
 #define UBRR0_VALUE ((F_CPU / (8UL * BAUD)) - 1) 
-
-#define TEST_PIN PORTB7
 
 #define MISO_PIN 50
 #define MOSI_PIN 51
@@ -52,34 +46,24 @@ using namespace std;
 #define LASER_PIN 38
 #define LASER_TRIGGER 39
 
-#define WRIST1_PWM_PIN  //
-#define WRIST2_PWM_PIN //
+#define WRIST1_PWM_PIN  A15//
+#define WRIST2_PWM_PIN A14//
 
-#define GRIPPER_PIN //
+#define GRIPPER_PIN 40//
 
 #define FLOAT_TOLERANCE 1e-5 // Tolerance for floating-point comparison
 
 
 // blue wire outlet is yellow, redwire outlet is purple
 
-// Pin Definitions
-// Stepper Motor 1: Base Rotation --> PIN22
-// Stepper Motor 2: Base Hinge --> PIN23
-// Stepper Motor 3: Elbow Driver --> PIN24
-// Stepper Motor 4: Forearm Rotator --> PIN25 
-
-// Function to initialize UART with a specific baud rate
-
-//#define CONTROL_BIT 1 // Corresponds to bit 1 of Port B
-
-
 char *inputString;
-
 String receivedString;
-
 volatile unsigned long timermillis = 0;
 
-//TMC5160Stepper driver = TMC5160Stepper(BASE_CS_PIN, R_SENSE);
+TMC5160Stepper BASEDriver = TMC5160Stepper(BASE_CS_PIN, R_SENSE);
+TMC5160Stepper SHOULDERDriver = TMC5160Stepper(SHOULDER_CS_PIN, R_SENSE);
+TMC5160Stepper ELBOWDriver = TMC5160Stepper(ELBOW_CS_PIN, R_SENSE);
+TMC5160Stepper FOREARMDriver = TMC5160Stepper(FOREARM_CS_PIN, R_SENSE);
 
 struct JOINTStruct {
     uint8_t STEP_PIN;
@@ -101,12 +85,13 @@ JOINTStruct ShoulderJoint;
 JOINTStruct ElbowJoint;
 JOINTStruct ForearmJoint;
 
-JOINTStruct* BASE = &BaseJoint;
+JOINTStruct* BASE;
 JOINTStruct* SHOULDER = &ShoulderJoint;
 JOINTStruct* ELBOW = &ElbowJoint;
 JOINTStruct* FOREARM = &ForearmJoint;
 
 JOINTStruct* JOINTARRAY[4] = {BASE, SHOULDER, ELBOW, FOREARM};
+
 
 void init_timer3() {
     // Set Timer3 to normal mode (counts from 0 to 65535)
@@ -125,7 +110,6 @@ void init_timer3() {
     sei();
 }
 
-
 ISR(TIMER3_OVF_vect) {
     // Increment the millis counter
     timermillis++;
@@ -133,8 +117,6 @@ ISR(TIMER3_OVF_vect) {
     // Reset Timer3 for 1 ms overflow
     TCNT3 = 65535 - (F_CPU / 64 / 1000) + 1;
 }
-
-//millis() function to return elapsed time
 
 unsigned long milliseconds() {
     unsigned long m;
@@ -145,9 +127,11 @@ unsigned long milliseconds() {
     return m;
 }
 
-
 void jointAssignment(){
     // assign base values
+    BaseJoint.STEP_PIN = BASE_STEP_PIN;
+    BASE = &BaseJoint;
+
     BASE -> STEP_PIN = BASE_STEP_PIN;
     BASE -> DIR_PIN = BASE_DIR_PIN;
     BASE -> ENA_PIN = BASE_ENA_PIN;
@@ -158,6 +142,7 @@ void jointAssignment(){
     BASE -> ANGLE_IDEAL = 0;
     BASE -> HOMESTATUS = false;
     BASE -> STEP_FACTOR = 100; // placeholder, means number of steps per degree
+
 
     //assign shoulder values 
     SHOULDER -> STEP_PIN = SHOULDER_STEP_PIN;
@@ -388,28 +373,38 @@ void motorDriver(JOINTStruct* JOINT) {
     int DIR = JOINT -> DIR;
     int SPEED = JOINT -> SPEED;
     unsigned long STEPCOUNT = JOINT -> STEPS;
-    uint8_t STEP_PIN = JOINT->STEP_PIN;
+    // uint8_t STEP_PIN = JOINT->STEP_PIN;
+    // uint8_t DIR_PIN = JOINT->DIR_PIN;
+    // uint8_t STEP_PIN = BASE->STEP_PIN;
+    // uint8_t DIR_PIN = BASE->DIR_PIN;
+    uint_t STEP_PIN = JOINT->STEP_PIN;
+    int DIR_PIN = JOINT->DIR_PIN;
+    
+    
     float ratio = JOINT->STEP_FACTOR; //use this to calculate the angle
     // speed should be given in 0-10 settings but what dimensions???
     // use this to calculate interval 0-99 rpm?
-    unsigned long INTERVAL = 10;
+    unsigned long INTERVAL = 0;
 
     if(STEPCOUNT > 0) {
     // investigate this  interval thing
         if(CurrentTime - LAST_STEP > INTERVAL) {
-            USART_SendString("available");
-            USART_SendString("\n");
+            // USART_SendString("available");
+            // USART_SendString("\n");
             //do the step thing, i guess toggle the pin state of the step pin
-            int pinState = digitalRead(STEP_PIN);
+            int pinState = !digitalRead(STEP_PIN);
             digitalWrite(STEP_PIN, pinState);
+            digitalWrite(DIR_PIN, DIR);
+
+
             STEPCOUNT --;
             char printableSteps[12];
             char printableAngle[12];
             char printableDir[12];
             ltoa(STEPCOUNT, printableSteps, 10);
-            USART_SendString("Step Count: ");
-            USART_SendString(printableSteps);
-            USART_SendString("\n");
+            // USART_SendString("Step Count: ");
+            // USART_SendString(printableSteps);
+            // USART_SendString("\n");
 
             JOINT->STEPS = STEPCOUNT;
             JOINT->LASTSTEP = CurrentTime;
@@ -417,9 +412,9 @@ void motorDriver(JOINTStruct* JOINT) {
             
 
             itoa(directionValue, printableDir, 10);
-            USART_SendString("directional value: ");
-            USART_SendString(printableDir);
-            USART_SendString("\n");
+            // USART_SendString("directional value: ");
+            // USART_SendString(printableDir);
+            // USART_SendString("\n");
 
             // but how do we handle the joint angles?
             // calculate it every time the joint steps but do state management only when a command enters
@@ -429,17 +424,17 @@ void motorDriver(JOINTStruct* JOINT) {
 
             if (DIR < 1) {
                 Angle -= 1/ratio; // Decrease Angle by the ratio
-                USART_SendString("direction is LOW");
-                USART_SendString("\n");
+                // USART_SendString("direction is LOW");
+                // USART_SendString("\n");
             } else if (DIR > 0) {
                 Angle += 1/ratio; // Increase Angle by the ratio
-                USART_SendString("direction is HIGH");
-                USART_SendString("\n");
+                // USART_SendString("direction is HIGH");
+                // USART_SendString("\n");
             }
             ftoa(Angle, printableAngle, 2);
-            USART_SendString("Current Angle: ");
-            USART_SendString(printableAngle); 
-            USART_SendString("\n");
+            // USART_SendString("Current Angle: ");
+            // USART_SendString(printableAngle); 
+            // USART_SendString("\n");
             JOINT->ANGLE_TRUE = Angle;
         }
     } 
@@ -482,34 +477,43 @@ int JointHoming(JOINTStruct* JOINT){
 }
 
 void initialize() {
-    //SPI.begin();
-    
+    SPI.begin();
 
     USART_Init();
     init_timer3();
     jointAssignment();
 
-    DDRB |= (1 << DDB0);
-    DDRB |= (1 << DDB7);
-    DDRG |= (1 << DDG0);
-    DDRC |= (1 << DDC2);
-    DDRC |= (1 << DDC4);
-    DDRC |= (1 << DDC5);
-    DDRL |= (1 << DDL2);
+    // DDRB |= (1 << DDB0);
+    // DDRB |= (1 << DDB7);
+    // DDRG |= (1 << DDG0);
+    // DDRC |= (1 << DDC2);
+    // DDRC |= (1 << DDC4);
+    // DDRC |= (1 << DDC5);
+    // DDRL |= (1 << DDL2);
+    
     pinMode(LASER_PIN, OUTPUT);
     pinMode(LASER_TRIGGER, INPUT);
 
+    pinMode(BASE_STEP_PIN, OUTPUT);
+    pinMode(BASE_DIR_PIN, OUTPUT);
+
+    BASEDriver.begin();
+    BASEDriver.en_pwm_mode(1);
+    BASEDriver.rms_current(500);
+    BASEDriver.microsteps(16);
+    BASEDriver.TCOOLTHRS(0xFFFFF); // 20bit max
+    BASEDriver.COOLCONF(0); // Reset COOLCONF
+    BASEDriver.sgt(10); // Set StallGuard threshold (range: -64 to 63)
 } 
 
 void inputHandler(char *inputString) {
-    if(USART_Available()){
+    if(USART_Available()){ 
         USART_ReceiveString(inputString, MAX_STRING_LENGTH);
         // command types
         // J1090005 joint 1 to 90.0 speed of 05rpm
         // J2180010 Joint 2 to 180.0 speed of 10rpm
-        // clean this code later, make it work first. 
-        // this only sets ideal state and speed
-        // we can calculate angles in post for 0 degrees and etc. 
+
+        // implement speed later
 
         if (inputString[0] == 'H'){
             // do the homing
