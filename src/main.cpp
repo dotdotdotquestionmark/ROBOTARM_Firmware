@@ -132,7 +132,7 @@ void jointAssignment(){
     BaseJoint.STEP_PIN = BASE_STEP_PIN;
     BASE = &BaseJoint;
 
-    BASE -> STEP_PIN = BASE_STEP_PIN;
+    //BASE -> STEP_PIN = BASE_STEP_PIN;
     BASE -> DIR_PIN = BASE_DIR_PIN;
     BASE -> ENA_PIN = BASE_ENA_PIN;
     BASE -> DIR = 0;
@@ -373,12 +373,19 @@ void motorDriver(JOINTStruct* JOINT) {
     int DIR = JOINT -> DIR;
     int SPEED = JOINT -> SPEED;
     unsigned long STEPCOUNT = JOINT -> STEPS;
-    // uint8_t STEP_PIN = JOINT->STEP_PIN;
-    // uint8_t DIR_PIN = JOINT->DIR_PIN;
+    //uint8_t STEP_PIN = JOINT->STEP_PIN;
+    uint8_t DIR_PIN = JOINT->DIR_PIN;
     // uint8_t STEP_PIN = BASE->STEP_PIN;
     // uint8_t DIR_PIN = BASE->DIR_PIN;
-    uint_t STEP_PIN = JOINT->STEP_PIN;
-    int DIR_PIN = JOINT->DIR_PIN;
+    uint8_t STEPPINGPIN = (JOINT->STEP_PIN)-1;
+    char PINNUMBER[12];
+    char SECONDPINNUMBER[12];
+    // USART_SendString(PINNUMBER);
+    // USART_SendString("\n");
+
+
+    //itoa(STEPPINGPIN, PINNUMBER, 10);
+
     
     
     float ratio = JOINT->STEP_FACTOR; //use this to calculate the angle
@@ -389,12 +396,20 @@ void motorDriver(JOINTStruct* JOINT) {
     if(STEPCOUNT > 0) {
     // investigate this  interval thing
         if(CurrentTime - LAST_STEP > INTERVAL) {
-            // USART_SendString("available");
-            // USART_SendString("\n");
+            USART_SendString("available");
+            USART_SendString("\n");
             //do the step thing, i guess toggle the pin state of the step pin
-            int pinState = !digitalRead(STEP_PIN);
-            digitalWrite(STEP_PIN, pinState);
-            digitalWrite(DIR_PIN, DIR);
+            int pinState = !digitalRead(STEPPINGPIN);
+            digitalWrite(STEPPINGPIN, pinState);
+
+            itoa(BASE_STEP_PIN, PINNUMBER, 10);
+            itoa(STEPPINGPIN, SECONDPINNUMBER, 10);
+            // USART_SendString("Pin Number1: ");
+            // USART_SendString(PINNUMBER);
+            // USART_SendString("\n");
+            USART_SendString("Pin Number2: ");
+            USART_SendString(SECONDPINNUMBER);
+            USART_SendString("\n");
 
 
             STEPCOUNT --;
@@ -402,9 +417,9 @@ void motorDriver(JOINTStruct* JOINT) {
             char printableAngle[12];
             char printableDir[12];
             ltoa(STEPCOUNT, printableSteps, 10);
-            // USART_SendString("Step Count: ");
-            // USART_SendString(printableSteps);
-            // USART_SendString("\n");
+            USART_SendString("Step Count: ");
+            USART_SendString(printableSteps);
+            USART_SendString("\n");
 
             JOINT->STEPS = STEPCOUNT;
             JOINT->LASTSTEP = CurrentTime;
@@ -412,9 +427,9 @@ void motorDriver(JOINTStruct* JOINT) {
             
 
             itoa(directionValue, printableDir, 10);
-            // USART_SendString("directional value: ");
-            // USART_SendString(printableDir);
-            // USART_SendString("\n");
+            USART_SendString("directional value: ");
+            USART_SendString(printableDir);
+            USART_SendString("\n");
 
             // but how do we handle the joint angles?
             // calculate it every time the joint steps but do state management only when a command enters
