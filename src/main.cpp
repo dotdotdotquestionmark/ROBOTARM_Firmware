@@ -53,7 +53,6 @@ using namespace std;
 
 #define FLOAT_TOLERANCE 1e-5 // Tolerance for floating-point comparison
 
-
 // blue wire outlet is yellow, redwire outlet is purple
 
 char *inputString;
@@ -85,7 +84,7 @@ JOINTStruct ShoulderJoint;
 JOINTStruct ElbowJoint;
 JOINTStruct ForearmJoint;
 
-JOINTStruct* BASE;
+JOINTStruct* BASE = &BaseJoint;
 JOINTStruct* SHOULDER = &ShoulderJoint;
 JOINTStruct* ELBOW = &ElbowJoint;
 JOINTStruct* FOREARM = &ForearmJoint;
@@ -129,10 +128,8 @@ unsigned long milliseconds() {
 
 void jointAssignment(){
     // assign base values
-    BaseJoint.STEP_PIN = BASE_STEP_PIN;
-    BASE = &BaseJoint;
 
-    //BASE -> STEP_PIN = BASE_STEP_PIN;
+    BASE -> STEP_PIN = BASE_STEP_PIN;
     BASE -> DIR_PIN = BASE_DIR_PIN;
     BASE -> ENA_PIN = BASE_ENA_PIN;
     BASE -> DIR = 0;
@@ -373,21 +370,17 @@ void motorDriver(JOINTStruct* JOINT) {
     int DIR = JOINT -> DIR;
     int SPEED = JOINT -> SPEED;
     unsigned long STEPCOUNT = JOINT -> STEPS;
-    //uint8_t STEP_PIN = JOINT->STEP_PIN;
+    uint8_t STEP_PIN = JOINT->STEP_PIN;
     uint8_t DIR_PIN = JOINT->DIR_PIN;
-    // uint8_t STEP_PIN = BASE->STEP_PIN;
     // uint8_t DIR_PIN = BASE->DIR_PIN;
-    uint8_t STEPPINGPIN = (JOINT->STEP_PIN)-1;
+    //uint8_t STEPPINGPIN = (JOINT->STEP_PIN);
     char PINNUMBER[12];
     char SECONDPINNUMBER[12];
     // USART_SendString(PINNUMBER);
     // USART_SendString("\n");
 
-
     //itoa(STEPPINGPIN, PINNUMBER, 10);
 
-    
-    
     float ratio = JOINT->STEP_FACTOR; //use this to calculate the angle
     // speed should be given in 0-10 settings but what dimensions???
     // use this to calculate interval 0-99 rpm?
@@ -395,41 +388,45 @@ void motorDriver(JOINTStruct* JOINT) {
 
     if(STEPCOUNT > 0) {
     // investigate this  interval thing
+        digitalWrite(DIR_PIN, DIR);
         if(CurrentTime - LAST_STEP > INTERVAL) {
-            USART_SendString("available");
-            USART_SendString("\n");
+            // USART_SendString("available");
+            // USART_SendString("\n");
             //do the step thing, i guess toggle the pin state of the step pin
-            int pinState = !digitalRead(STEPPINGPIN);
-            digitalWrite(STEPPINGPIN, pinState);
+            int pinState = !digitalRead(STEP_PIN);
+            digitalWrite(STEP_PIN, pinState);
 
-            itoa(BASE_STEP_PIN, PINNUMBER, 10);
-            itoa(STEPPINGPIN, SECONDPINNUMBER, 10);
+            // itoa(BASE_STEP_PIN, PINNUMBER, 10);
+            // itoa(STEPPINGPIN, SECONDPINNUMBER, 10);
+
             // USART_SendString("Pin Number1: ");
             // USART_SendString(PINNUMBER);
             // USART_SendString("\n");
-            USART_SendString("Pin Number2: ");
-            USART_SendString(SECONDPINNUMBER);
-            USART_SendString("\n");
+            // USART_SendString("Pin Number2: ");
+            // USART_SendString(SECONDPINNUMBER);
+            // USART_SendString("\n");
 
 
             STEPCOUNT --;
             char printableSteps[12];
             char printableAngle[12];
             char printableDir[12];
-            ltoa(STEPCOUNT, printableSteps, 10);
-            USART_SendString("Step Count: ");
-            USART_SendString(printableSteps);
-            USART_SendString("\n");
+
+            // ltoa(STEPCOUNT, printableSteps, 10);
+
+            // USART_SendString("Step Count: ");
+            // USART_SendString(printableSteps);
+            // USART_SendString("\n");
 
             JOINT->STEPS = STEPCOUNT;
             JOINT->LASTSTEP = CurrentTime;
             int directionValue = JOINT->DIR;
             
 
-            itoa(directionValue, printableDir, 10);
-            USART_SendString("directional value: ");
-            USART_SendString(printableDir);
-            USART_SendString("\n");
+            // itoa(directionValue, printableDir, 10);
+            // USART_SendString("directional value: ");
+            // USART_SendString(printableDir);
+            // USART_SendString("\n");
 
             // but how do we handle the joint angles?
             // calculate it every time the joint steps but do state management only when a command enters
@@ -492,19 +489,13 @@ int JointHoming(JOINTStruct* JOINT){
 }
 
 void initialize() {
+
     SPI.begin();
 
     USART_Init();
     init_timer3();
-    jointAssignment();
 
-    // DDRB |= (1 << DDB0);
-    // DDRB |= (1 << DDB7);
-    // DDRG |= (1 << DDG0);
-    // DDRC |= (1 << DDC2);
-    // DDRC |= (1 << DDC4);
-    // DDRC |= (1 << DDC5);
-    // DDRL |= (1 << DDL2);
+    jointAssignment();
     
     pinMode(LASER_PIN, OUTPUT);
     pinMode(LASER_TRIGGER, INPUT);
@@ -512,13 +503,47 @@ void initialize() {
     pinMode(BASE_STEP_PIN, OUTPUT);
     pinMode(BASE_DIR_PIN, OUTPUT);
 
+    pinMode(SHOULDER_STEP_PIN, OUTPUT);
+    pinMode(SHOULDER_DIR_PIN, OUTPUT);
+  
+    pinMode(ELBOW_STEP_PIN, OUTPUT);
+    pinMode(ELBOW_DIR_PIN, OUTPUT);
+  
+    pinMode(FOREARM_STEP_PIN, OUTPUT);
+    pinMode(FOREARM_DIR_PIN, OUTPUT);
+
     BASEDriver.begin();
     BASEDriver.en_pwm_mode(1);
-    BASEDriver.rms_current(500);
+    BASEDriver.rms_current(1000); // Changed to 1000
     BASEDriver.microsteps(16);
-    BASEDriver.TCOOLTHRS(0xFFFFF); // 20bit max
-    BASEDriver.COOLCONF(0); // Reset COOLCONF
-    BASEDriver.sgt(10); // Set StallGuard threshold (range: -64 to 63)
+    BASEDriver.TCOOLTHRS(0xFFFFF);
+    BASEDriver.COOLCONF(0);
+    BASEDriver.sgt(10);
+  
+    SHOULDERDriver.begin();
+    SHOULDERDriver.en_pwm_mode(1);
+    SHOULDERDriver.rms_current(1000); // Changed to 1000
+    SHOULDERDriver.microsteps(16);
+    SHOULDERDriver.TCOOLTHRS(0xFFFFF);
+    SHOULDERDriver.COOLCONF(0);
+    SHOULDERDriver.sgt(10);
+  
+    ELBOWDriver.begin();
+    ELBOWDriver.en_pwm_mode(1);
+    ELBOWDriver.rms_current(1000); // Changed to 1000
+    ELBOWDriver.microsteps(16);
+    ELBOWDriver.TCOOLTHRS(0xFFFFF);
+    ELBOWDriver.COOLCONF(0);
+    ELBOWDriver.sgt(10);
+  
+    FOREARMDriver.begin();
+    FOREARMDriver.en_pwm_mode(1);
+    FOREARMDriver.rms_current(800); // Changed to 1000
+    FOREARMDriver.microsteps(16);
+    FOREARMDriver.TCOOLTHRS(0xFFFFF);
+    FOREARMDriver.COOLCONF(0);
+    FOREARMDriver.sgt(10);
+  
 } 
 
 void inputHandler(char *inputString) {
