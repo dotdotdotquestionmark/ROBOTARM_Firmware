@@ -138,7 +138,7 @@ void jointAssignment(){
     BASE -> ANGLE_TRUE = 0;
     BASE -> ANGLE_IDEAL = 0;
     BASE -> HOMESTATUS = false;
-    BASE -> STEP_FACTOR = 100; // placeholder, means number of steps per degree
+    BASE -> STEP_FACTOR = 300; // placeholder, means number of steps per degree
 
 
     //assign shoulder values 
@@ -151,7 +151,7 @@ void jointAssignment(){
     SHOULDER -> ANGLE_TRUE = 0;
     SHOULDER -> ANGLE_IDEAL = 0;
     SHOULDER -> HOMESTATUS = false;
-    SHOULDER -> STEP_FACTOR = 500; //placeholder
+    SHOULDER -> STEP_FACTOR = 300; //placeholder
 
     ELBOW -> STEP_PIN = ELBOW_STEP_PIN; 
     ELBOW -> DIR_PIN = ELBOW_DIR_PIN; 
@@ -162,7 +162,7 @@ void jointAssignment(){
     ELBOW -> ANGLE_TRUE = 0; 
     ELBOW -> ANGLE_IDEAL = 0; 
     ELBOW -> HOMESTATUS = false;
-    ELBOW -> STEP_FACTOR = 200;
+    ELBOW -> STEP_FACTOR = 300;
 
     FOREARM -> STEP_PIN = FOREARM_STEP_PIN; 
     FOREARM -> DIR_PIN = FOREARM_DIR_PIN; 
@@ -514,7 +514,7 @@ void initialize() {
 
     BASEDriver.begin();
     BASEDriver.en_pwm_mode(1);
-    BASEDriver.rms_current(1000); // Changed to 1000
+    BASEDriver.rms_current(2000); // Changed to 1000
     BASEDriver.microsteps(16);
     BASEDriver.TCOOLTHRS(0xFFFFF);
     BASEDriver.COOLCONF(0);
@@ -522,7 +522,7 @@ void initialize() {
   
     SHOULDERDriver.begin();
     SHOULDERDriver.en_pwm_mode(1);
-    SHOULDERDriver.rms_current(1000); // Changed to 1000
+    SHOULDERDriver.rms_current(2000); // Changed to 1000
     SHOULDERDriver.microsteps(16);
     SHOULDERDriver.TCOOLTHRS(0xFFFFF);
     SHOULDERDriver.COOLCONF(0);
@@ -530,7 +530,7 @@ void initialize() {
   
     ELBOWDriver.begin();
     ELBOWDriver.en_pwm_mode(1);
-    ELBOWDriver.rms_current(1000); // Changed to 1000
+    ELBOWDriver.rms_current(2000); // Changed to 1000
     ELBOWDriver.microsteps(16);
     ELBOWDriver.TCOOLTHRS(0xFFFFF);
     ELBOWDriver.COOLCONF(0);
@@ -538,7 +538,7 @@ void initialize() {
   
     FOREARMDriver.begin();
     FOREARMDriver.en_pwm_mode(1);
-    FOREARMDriver.rms_current(800); // Changed to 1000
+    FOREARMDriver.rms_current(800); // Changed to 800
     FOREARMDriver.microsteps(16);
     FOREARMDriver.TCOOLTHRS(0xFFFFF);
     FOREARMDriver.COOLCONF(0);
