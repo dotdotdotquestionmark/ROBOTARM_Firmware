@@ -57,7 +57,7 @@ using namespace std;
 
 char *inputString;
 String receivedString;
-volatile unsigned long timermillis = 0;
+volatile unsigned long timermicros = 0;
 
 TMC5160Stepper BASEDriver = TMC5160Stepper(BASE_CS_PIN, R_SENSE);
 TMC5160Stepper SHOULDERDriver = TMC5160Stepper(SHOULDER_CS_PIN, R_SENSE);
@@ -97,13 +97,13 @@ void init_timer3() {
     TCCR3A = 0x00;
 
     // Set prescaler to 64
-    TCCR3B = (1 << CS31) | (1 << CS30);
+    TCCR3B = (1 << CS31); //| (1 << CS30);
 
     // Enable Timer3 overflow interrupt
     TIMSK3 = (1 << TOIE3);
 
     // Initialize Timer3 for 1 ms overflow
-    TCNT3 = 65535 - (F_CPU / 64 / 1000) + 1;
+    TCNT3 = 65535 - (F_CPU / 8 / 1000000) + 1;
 
     // Enable global interrupts
     sei();
@@ -111,20 +111,21 @@ void init_timer3() {
 
 ISR(TIMER3_OVF_vect) {
     // Increment the millis counter
-    timermillis++;
+    timermicros++;
 
     // Reset Timer3 for 1 ms overflow
     TCNT3 = 65535 - (F_CPU / 64 / 1000) + 1;
 }
 
-unsigned long milliseconds() {
-    unsigned long m;
+unsigned long microseconds() {
+    unsigned long micros;
     uint8_t oldSREG = SREG; // Save the current interrupt status
     cli(); // Disable interrupts
-    m = timermillis; // Read the volatile variable
+    micros = timermicros; // Read the volatile variable
     SREG = oldSREG; // Restore the interrupt status
-    return m;
+    return micros;
 }
+
 
 void jointAssignment(){
     // assign base values
@@ -366,16 +367,16 @@ void motorDriver(JOINTStruct* JOINT) {
     // this function will live in the main loop and manipulate motors on a per need basis
     // get STEP COUNT, DIRECTION, and SPEED, and last step
     unsigned long LAST_STEP = JOINT->LASTSTEP;
-    unsigned long CurrentTime = milliseconds();
+    unsigned long CurrentTime = microseconds();
     int DIR = JOINT -> DIR;
-    int SPEED = JOINT -> SPEED;
+    // int SPEED = JOINT -> SPEED;
     unsigned long STEPCOUNT = JOINT -> STEPS;
     uint8_t STEP_PIN = JOINT->STEP_PIN;
     uint8_t DIR_PIN = JOINT->DIR_PIN;
     // uint8_t DIR_PIN = BASE->DIR_PIN;
     //uint8_t STEPPINGPIN = (JOINT->STEP_PIN);
-    char PINNUMBER[12];
-    char SECONDPINNUMBER[12];
+    // char PINNUMBER[12];
+    // char SECONDPINNUMBER[12];
     // USART_SendString(PINNUMBER);
     // USART_SendString("\n");
 
@@ -408,9 +409,9 @@ void motorDriver(JOINTStruct* JOINT) {
 
 
             STEPCOUNT --;
-            char printableSteps[12];
-            char printableAngle[12];
-            char printableDir[12];
+            // char printableSteps[12];
+            // char printableAngle[12];
+            // char printableDir[12];
 
             // ltoa(STEPCOUNT, printableSteps, 10);
 
@@ -419,9 +420,7 @@ void motorDriver(JOINTStruct* JOINT) {
             // USART_SendString("\n");
 
             JOINT->STEPS = STEPCOUNT;
-            JOINT->LASTSTEP = CurrentTime;
-            int directionValue = JOINT->DIR;
-            
+            JOINT->LASTSTEP = CurrentTime;            
 
             // itoa(directionValue, printableDir, 10);
             // USART_SendString("directional value: ");
@@ -443,7 +442,7 @@ void motorDriver(JOINTStruct* JOINT) {
                 // USART_SendString("direction is HIGH");
                 // USART_SendString("\n");
             }
-            ftoa(Angle, printableAngle, 2);
+            //ftoa(Angle, printableAngle, 2);
             // USART_SendString("Current Angle: ");
             // USART_SendString(printableAngle); 
             // USART_SendString("\n");
