@@ -616,6 +616,14 @@ int main(void) {
         motorDriver(ELBOW);
         motorDriver(FOREARM);
 
+        // unsigned long time1 = microseconds();
+        // char timeHolder[12];
+
+        // ltoa(time1, timeHolder, 10);
+        // USART_SendString(timeHolder);
+        // USART_SendString("\n");
+
+
     }
 
     return(0);
