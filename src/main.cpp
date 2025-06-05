@@ -18,6 +18,7 @@ using namespace std;
 #define MAX_STRING_LENGTH 100 // Adjust this value as needed
 #define BAUD 115200
 #define UBRR0_VALUE ((F_CPU / (8UL * BAUD)) - 1) 
+#define DRIVER_ADDRESS   0b00   // TMC2209 Driver address according to MS1 and MS2
 
 #define MISO_PIN 50
 #define MOSI_PIN 51
@@ -26,22 +27,25 @@ using namespace std;
 #define BASE_STEP_PIN 34
 #define BASE_DIR_PIN 30
 #define BASE_ENA_PIN 22
-#define BASE_CS_PIN 26
+#define BASE_CS_PIN 25
 
 #define SHOULDER_STEP_PIN 35
 #define SHOULDER_DIR_PIN 31
 #define SHOULDER_ENA_PIN 23
-#define SHOULDER_CS_PIN 27
+#define SHOULDER_CS_PIN 26
 
 #define ELBOW_STEP_PIN 36
 #define ELBOW_DIR_PIN 32
 #define ELBOW_ENA_PIN 24
-#define ELBOW_CS_PIN 28
+#define ELBOW_CS_PIN 27
 
 #define FOREARM_STEP_PIN 37
 #define FOREARM_DIR_PIN 33
 #define FOREARM_ENA_PIN 25
-#define FOREARM_CS_PIN 29
+#define FOREARM_CLK_PIN 28
+#define FOREARM_RX 12
+#define FOREARM_TX 13
+
 
 #define LASER_PIN 38
 #define LASER_TRIGGER 39
@@ -62,7 +66,8 @@ volatile unsigned long timermicros = 0;
 TMC5160Stepper BASEDriver = TMC5160Stepper(BASE_CS_PIN, R_SENSE);
 TMC5160Stepper SHOULDERDriver = TMC5160Stepper(SHOULDER_CS_PIN, R_SENSE);
 TMC5160Stepper ELBOWDriver = TMC5160Stepper(ELBOW_CS_PIN, R_SENSE);
-TMC5160Stepper FOREARMDriver = TMC5160Stepper(FOREARM_CS_PIN, R_SENSE);
+//TMC5160Stepper FOREARMDriver = TMCStepper(FOREARM_CLK_PIN, R_SENSE);
+TMC2209Stepper FOREARMDriver(&Serial1, R_SENSE, DRIVER_ADDRESS);   // Create TMC driver
 
 struct JOINTStruct {
     uint8_t STEP_PIN;
@@ -490,6 +495,7 @@ int JointHoming(JOINTStruct* JOINT){
 void initialize() {
 
     SPI.begin();
+    Serial1.begin(115200);           // initialize software serial for UART motor control
 
     USART_Init();
     init_timer3();
@@ -534,15 +540,20 @@ void initialize() {
     ELBOWDriver.TCOOLTHRS(0xFFFFF);
     ELBOWDriver.COOLCONF(0);
     ELBOWDriver.sgt(10);
-  
-    FOREARMDriver.begin();
-    FOREARMDriver.en_pwm_mode(1);
-    FOREARMDriver.rms_current(800); // Changed to 800
-    FOREARMDriver.microsteps(16);
-    FOREARMDriver.TCOOLTHRS(0xFFFFF);
-    FOREARMDriver.COOLCONF(0);
-    FOREARMDriver.sgt(10);
-  
+
+    digitalWrite(FOREARM_ENA_PIN, HIGH);         // Enable TMC2209 board  
+    digitalWrite(FOREARM_ENA_PIN, LOW);         // Enable TMC2209 board  
+
+    FOREARMDriver.beginSerial(115200);
+    
+    // FOREARMDriver.begin();  //<-- this is the killer, disables serial ports
+    // FOREARMDriver.toff(5);
+    // FOREARMDriver.rms_current(800); // Changed to 800
+    // FOREARMDriver.microsteps(16);
+    // FOREARMDriver.TCOOLTHRS(0xFFFFF);
+    // FOREARMDriver.COOLCONF(0);
+    // Serial1.end();
+
 } 
 
 void inputHandler(char *inputString) {
