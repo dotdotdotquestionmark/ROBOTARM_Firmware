@@ -451,6 +451,9 @@ void motorDriver(JOINTStruct* JOINT) {
     } 
 }
 
+void servoDriver(JOINTStruct *JOINT) {
+    
+}
 //homing functions
 
 void wristHoming() {
