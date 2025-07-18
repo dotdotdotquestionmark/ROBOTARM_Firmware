@@ -126,7 +126,6 @@ unsigned long microseconds() {
     return micros;
 }
 
-
 void jointAssignment(){
     // assign base values
 
@@ -218,7 +217,27 @@ void USART_Init() {
     UCSR0C = (1 << UCSZ01) | (1 << UCSZ00);
 }
 
+void USART2_Init(){
+    // Set baud rate
+    UBRR0H = (uint8_t)(UBRR0_VALUE >> 8);
+    UBRR0L = (uint8_t)(UBRR0_VALUE);
+    // Enable double-speed mode
+    UCSR0A = (1 << U2X0);
+    // Enable transmitter and receiver
+    UCSR0B = (1 << TXEN0) | (1 << RXEN0);
+    // Set frame format: 8 data bits, 1 stop bit, no parity
+    UCSR0C = (1 << UCSZ01) | (1 << UCSZ00);
+}
+
+
 void USART_Transmit(char data) {
+    // Wait for the transmit buffer to be empty
+    while (!(UCSR0A & (1 << UDRE0)));
+    // Put data into the buffer, sends the data
+    UDR0 = data;
+}
+
+void USART2_Transmit(char data) {
     // Wait for the transmit buffer to be empty
     while (!(UCSR0A & (1 << UDRE0)));
     // Put data into the buffer, sends the data
@@ -231,7 +250,20 @@ void USART_SendString(const char* str) {
     }
 }
 
+void USART2_SendString(const char* str) {
+    while (*str) {
+        USART_Transmit(*str++);
+    }
+}
+
 char USART_Receive() {
+    // Wait for data to be received
+    while (!(UCSR0A & (1 << RXC0)));
+    // Return received data
+    return UDR0;
+}
+
+char USART2_Receive() {
     // Wait for data to be received
     while (!(UCSR0A & (1 << RXC0)));
     // Return received data
@@ -259,6 +291,28 @@ void USART_ReceiveString(char* buffer, uint8_t max_length) {
     USART_SendString("\n");
 }
 
+void USART2_ReceiveString(char* buffer, uint8_t max_length) {
+    uint8_t index = 0;
+    char received_char;
+
+    // Read characters until newline or buffer is full
+    while (index < max_length) {
+        received_char = USART_Receive();
+
+        // Check for newline (end of string)
+        if (received_char == '\n' || received_char == '\r') {
+            break;
+        }
+        // Store the received character
+        buffer[index++] = received_char;
+    }
+    // Null-terminate the string
+    buffer[index+1] = '\0';
+    USART_SendString(buffer);
+    USART_SendString("\n");
+}
+
+
 int integerExtract(const char* str, uint8_t start, uint8_t end) {
     char substring[10]; // Buffer to hold the substring
     uint8_t length = end - start + 1; // Length of the substring
@@ -275,6 +329,10 @@ int integerExtract(const char* str, uint8_t start, uint8_t end) {
 
 bool USART_Available() {
     return (UCSR0A & (1 << RXC0)); // Check if data is available in the receive buffer
+}
+
+bool USART2_Available() {
+    return (UCSR1A & (1 << RXC0)); // Check if data is available in the receive buffer
 }
 
 void stateCheck(){
@@ -451,6 +509,7 @@ void motorDriver(JOINTStruct* JOINT) {
     } 
 }
 
+// offload this one to a secondary board
 void servoDriver(JOINTStruct *JOINT) {
     
 }
